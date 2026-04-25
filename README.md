@@ -47,7 +47,7 @@ python install_agent.py --uninstall --platform opencode
 
 ## Run sandbox E2E tests
 
-The sandbox E2E runner starts both the memory server container and a test container, runs installer and regression checks, then cleans up automatically:
+The sandbox E2E runner starts both the memory server container and a test container, runs the Python Scenario 1 entrypoint (`sandbox/e2e_scenario1.py`), installs the actual OpenCode integration, runs `opencode run` against a fake OpenAI-compatible provider, verifies the KLONA mental model is injected into the model request, uninstalls KLONA, and cleans up automatically.
 
 Requires Docker Compose v2 and a running Docker daemon.
 

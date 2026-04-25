@@ -1,0 +1,2 @@
+# Dummy E2E Mental Model
+Unique marker: KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62

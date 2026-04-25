@@ -4,16 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$REPO_ROOT/sandbox/docker-compose.e2e.yml"
-
-if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
-  PROJECT_NAME="$COMPOSE_PROJECT_NAME"
-elif command -v sha256sum >/dev/null 2>&1; then
-  PROJECT_HASH="$(printf '%s' "$REPO_ROOT" | sha256sum | cut -c1-12)"
-  PROJECT_NAME="klona-e2e-$PROJECT_HASH"
-else
-  REPO_BASENAME="$(basename -- "$REPO_ROOT" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '-')"
-  PROJECT_NAME="klona-e2e-${REPO_BASENAME:-repo}-$$"
-fi
+PROJECT_NAME="sandbox"
 
 cleanup() {
   local status=$?
