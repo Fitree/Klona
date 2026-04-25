@@ -1,0 +1,3 @@
+# KLONA Claude Integration
+
+Placeholder.
