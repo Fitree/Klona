@@ -1,0 +1,13 @@
+[project]
+name = "klona-memory-server"
+version = "0.2.0"
+description = "Klona Memory MCP Server — markdown knowledge base as a mounted filesystem"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.27.0",
+    "uvicorn>=0.31.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
