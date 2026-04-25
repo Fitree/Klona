@@ -44,3 +44,13 @@ python install_agent.py --platform opencode --klona-memory-server-url http://loc
 ```bash
 python install_agent.py --uninstall --platform opencode
 ```
+
+## Run sandbox E2E tests
+
+The sandbox E2E runner starts both the memory server container and a test container, runs installer and regression checks, then cleans up automatically:
+
+Requires Docker Compose v2 and a running Docker daemon.
+
+```bash
+sandbox/run_e2e.sh
+```

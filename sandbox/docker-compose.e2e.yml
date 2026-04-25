@@ -1,0 +1,34 @@
+services:
+  test-memory-server:
+    build:
+      context: ../memory_server
+    environment:
+      - AUTH_TOKEN=e2e-token
+      - VAULT_DIR=/vault
+      - ALLOWED_HOSTS=test-memory-server:8000,test-env:*,localhost:8000
+    volumes:
+      - e2e-vault:/vault
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  test-env:
+    build:
+      context: ..
+      dockerfile: sandbox/Dockerfile
+    depends_on:
+      test-memory-server:
+        condition: service_healthy
+    environment:
+      - HOME=/tmp/klona-e2e-home
+      - KLONA_E2E_MCP_URL=http://test-memory-server:8000/mcp
+      - KLONA_E2E_TOKEN=e2e-token
+    volumes:
+      - ..:/workspace/KLONA
+    working_dir: /workspace/KLONA
+    command: ["bash", "sandbox/e2e_test.sh"]
+
+volumes:
+  e2e-vault:
