@@ -25,6 +25,15 @@ class OpenCodeInstallerTests(unittest.TestCase):
             installer.install()
         return input_mock, getpass_mock
 
+    def install_with_args(self, mcp_url=None, mcp_token=None, input_value=None, token_value=None):
+        with mock.patch.object(installer.Path, "home", return_value=self.home), mock.patch(
+            "builtins.input", return_value=input_value
+        ) as input_mock, mock.patch(
+            "getpass.getpass", return_value=token_value
+        ) as getpass_mock, contextlib.redirect_stdout(io.StringIO()):
+            installer.install(mcp_url=mcp_url, mcp_token=mcp_token)
+        return input_mock, getpass_mock
+
     def uninstall(self):
         with mock.patch.object(
             installer.Path, "home", return_value=self.home
@@ -150,6 +159,72 @@ class OpenCodeInstallerTests(unittest.TestCase):
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://prompted.example/mcp")
         self.assertEqual(entry["headers"]["Authorization"], "Bearer prompt-token")
+
+    def test_install_with_mcp_args_does_not_prompt_and_writes_mcp_entry(self):
+        input_mock, getpass_mock = self.install_with_args(
+            mcp_url="https://args.example/mcp", mcp_token="arg-token"
+        )
+
+        input_mock.assert_not_called()
+        getpass_mock.assert_not_called()
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://args.example/mcp")
+        self.assertEqual(entry["headers"]["Authorization"], "Bearer arg-token")
+
+    def test_install_with_empty_url_arg_raises_system_exit(self):
+        with self.assertRaisesRegex(SystemExit, "Klona memory MCP URL cannot be empty"):
+            self.install_with_args(mcp_url="", mcp_token="arg-token")
+
+        self.assertFalse((self.opencode / "opencode.json").exists())
+
+    def test_install_with_whitespace_url_arg_raises_system_exit(self):
+        with self.assertRaisesRegex(SystemExit, "Klona memory MCP URL cannot be empty"):
+            self.install_with_args(mcp_url="   \t", mcp_token="arg-token")
+
+        self.assertFalse((self.opencode / "opencode.json").exists())
+
+    def test_install_with_empty_token_arg_raises_system_exit(self):
+        with self.assertRaisesRegex(SystemExit, "Klona memory bearer token cannot be empty"):
+            self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="")
+
+        self.assertFalse((self.opencode / "opencode.json").exists())
+
+    def test_install_with_whitespace_token_arg_raises_system_exit(self):
+        with self.assertRaisesRegex(SystemExit, "Klona memory bearer token cannot be empty"):
+            self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="  \n")
+
+        self.assertFalse((self.opencode / "opencode.json").exists())
+
+    def test_install_with_mcp_args_strips_values(self):
+        self.install_with_args(
+            mcp_url="  https://args.example/mcp\t", mcp_token="  arg-token\n"
+        )
+
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://args.example/mcp")
+        self.assertEqual(entry["headers"]["Authorization"], "Bearer arg-token")
+
+    def test_install_with_url_arg_prompts_only_for_token(self):
+        input_mock, getpass_mock = self.install_with_args(
+            mcp_url="https://args.example/mcp", token_value="prompted-token"
+        )
+
+        input_mock.assert_not_called()
+        getpass_mock.assert_called_once_with("Klona memory bearer token: ")
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://args.example/mcp")
+        self.assertEqual(entry["headers"]["Authorization"], "Bearer prompted-token")
+
+    def test_install_with_token_arg_prompts_only_for_url(self):
+        input_mock, getpass_mock = self.install_with_args(
+            mcp_token="arg-token", input_value="https://prompted.example/mcp"
+        )
+
+        input_mock.assert_called_once_with("Klona memory MCP URL: ")
+        getpass_mock.assert_not_called()
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://prompted.example/mcp")
+        self.assertEqual(entry["headers"]["Authorization"], "Bearer arg-token")
 
     def test_install_invalid_json_raises_system_exit_and_leaves_config(self):
         config = self.opencode / "opencode.json"

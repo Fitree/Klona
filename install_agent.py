@@ -21,6 +21,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Remove KLONA-owned files and config for the selected platform.",
     )
+    parser.add_argument(
+        "--klona-memory-server-url",
+        dest="mcp_url",
+        help="Klona memory MCP URL for non-interactive install.",
+    )
+    parser.add_argument(
+        "--klona-memory-server-token",
+        dest="mcp_token",
+        help="Klona memory bearer token for non-interactive install.",
+    )
     return parser
 
 
@@ -33,7 +43,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.uninstall:
             opencode_installer.uninstall()
         else:
-            opencode_installer.install()
+            opencode_installer.install(mcp_url=args.mcp_url, mcp_token=args.mcp_token)
         return 0
 
     raise AssertionError(f"unsupported platform reached argparse dispatch: {args.platform}")

@@ -98,6 +98,13 @@ def _prompt_mcp_token() -> str:
     return value
 
 
+def _provided_value(value: str, empty_message: str) -> str:
+    value = value.strip()
+    if not value:
+        raise SystemExit(empty_message)
+    return value
+
+
 def _mcp_entry(url: str, token: str) -> dict[str, Any]:
     return {
         "type": "remote",
@@ -214,7 +221,7 @@ def _remove_mcp_config(config_path: Path) -> None:
         _write_json(config_path, config)
 
 
-def install() -> None:
+def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
     """Install or refresh KLONA-owned OpenCode files and config."""
     target = opencode_dir()
     config_path = target / "opencode.json"
@@ -223,8 +230,16 @@ def install() -> None:
     plugin_copy = target / "plugins" / "klona-memory-session.js"
     _check_required_assets()
     config = _read_json_object(config_path)
-    url = _prompt_mcp_url()
-    token = _prompt_mcp_token()
+    url = (
+        _provided_value(mcp_url, "Klona memory MCP URL cannot be empty")
+        if mcp_url is not None
+        else _prompt_mcp_url()
+    )
+    token = (
+        _provided_value(mcp_token, "Klona memory bearer token cannot be empty")
+        if mcp_token is not None
+        else _prompt_mcp_token()
+    )
 
     snapshots = {
         agent_md: _snapshot_file(agent_md),

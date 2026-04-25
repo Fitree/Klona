@@ -33,6 +33,12 @@ python install_agent.py --platform opencode
 
 The installer asks for the KLONA memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`.
 
+For non-interactive installs, pass the MCP URL and bearer token as dashed arguments:
+
+```bash
+python install_agent.py --platform opencode --klona-memory-server-url http://localhost:32310/mcp --klona-memory-server-token your-private-token
+```
+
 ## Uninstall OpenCode integration
 
 ```bash
