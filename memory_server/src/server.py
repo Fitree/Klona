@@ -120,25 +120,6 @@ _maintenance_locked = False
 #   .filesystem_path — filesystem Path:   Path("/vault/projects/klona.md")
 # ---------------------------------------------------------------------------
 
-def _is_relative_to(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
-
-
-def _is_sibling_prefix_escape(path: Path, vault_root: Path) -> bool:
-    try:
-        relative_to_parent = path.relative_to(vault_root.parent)
-    except ValueError:
-        return False
-    if not relative_to_parent.parts:
-        return False
-    first_part = relative_to_parent.parts[0]
-    return first_part != vault_root.name and first_part.startswith(vault_root.name)
-
-
 class VaultPath:
     """Unified vault path. Accepts any format, provides .vault_path and .filesystem_path views."""
 
@@ -149,21 +130,19 @@ class VaultPath:
 
         # 2. Already under vault? Use directly. Otherwise, treat as relative to vault.
         resolved = p.resolve()
-        if _is_relative_to(resolved, vault_resolved):
+        if str(resolved).startswith(str(vault_resolved)):
             abs_path = resolved
-        elif p.is_absolute() and _is_sibling_prefix_escape(resolved, vault_resolved):
-            raise ValueError(f"Path escapes vault: {path}")
         else:
             # Strip leading / so Path("/projects") becomes relative "projects"
             abs_path = (VAULT_DIR / Path(str(p).strip("/"))).resolve()
 
         # 3. Safety check
-        if not _is_relative_to(abs_path, vault_resolved):
+        if not str(abs_path).startswith(str(vault_resolved)):
             raise ValueError(f"Path escapes vault: {path}")
 
         self.filesystem_path: Path = abs_path
 
-        rel = str(abs_path.relative_to(vault_resolved)).strip("/")
+        rel = str(abs_path.relative_to(VAULT_DIR.resolve())).strip("/")
         if not rel or rel == ".":
             self.vault_path = "/"
             return
@@ -186,6 +165,10 @@ class VaultPath:
     @property
     def name(self) -> str:
         return self.filesystem_path.name
+
+    @property
+    def parent(self) -> "VaultPath":
+        return VaultPath(self.filesystem_path.parent, is_dir=True)
 
     def exists(self) -> bool:
         return self.filesystem_path.exists()
@@ -355,13 +338,6 @@ def _check_maintenance() -> dict | None:
     return None
 
 
-def _check_markdown_file_path(vp: VaultPath, path: str) -> dict | None:
-    """Return error dict if a file operation path is not a markdown file path."""
-    if vp.filesystem_path.suffix != ".md":
-        return {"error": "invalid_path", "message": f"File path must end with .md: {path}"}
-    return None
-
-
 # ---------------------------------------------------------------------------
 # MCP Tools
 # ---------------------------------------------------------------------------
@@ -433,10 +409,6 @@ async def vault_read(path: str) -> dict:
         except ValueError as e:
             return {"error": "invalid_path", "message": str(e)}
 
-        path_err = _check_markdown_file_path(vp, path)
-        if path_err:
-            return path_err
-
         if not vp.exists() or not vp.is_file():
             return {"error": "file_not_found", "message": f"File not found: {path}"}
 
@@ -470,10 +442,6 @@ async def vault_write(path: str, content: str) -> dict:
             vp = VaultPath(path)
         except ValueError as e:
             return {"error": "invalid_path", "message": str(e)}
-
-        path_err = _check_markdown_file_path(vp, path)
-        if path_err:
-            return path_err
 
         if vp.exists():
             return {"error": "file_already_exists", "message": f"File already exists: {path}. Use vault_update instead."}
@@ -516,10 +484,6 @@ async def vault_update(path: str, content: str) -> dict:
         except ValueError as e:
             return {"error": "invalid_path", "message": str(e)}
 
-        path_err = _check_markdown_file_path(vp, path)
-        if path_err:
-            return path_err
-
         if not vp.exists() or not vp.is_file():
             return {"error": "file_not_found", "message": f"File not found: {path}. Use vault_write instead."}
 
@@ -552,10 +516,6 @@ async def vault_delete(path: str) -> dict:
             vp = VaultPath(path)
         except ValueError as e:
             return {"error": "invalid_path", "message": str(e)}
-
-        path_err = _check_markdown_file_path(vp, path)
-        if path_err:
-            return path_err
 
         if not vp.exists() or not vp.is_file():
             return {"error": "file_not_found", "message": f"File not found: {path}"}
@@ -592,18 +552,8 @@ async def vault_move(src: str, dst: str) -> dict:
         except ValueError as e:
             return {"error": "invalid_path", "message": str(e)}
 
-        src_path_err = _check_markdown_file_path(src_vp, src)
-        if src_path_err:
-            return src_path_err
-        dst_path_err = _check_markdown_file_path(dst_vp, dst)
-        if dst_path_err:
-            return dst_path_err
-
         if not src_vp.exists() or not src_vp.is_file():
             return {"error": "file_not_found", "message": f"Source file not found: {src}"}
-
-        if dst_vp.exists() and dst_vp.filesystem_path.resolve() != src_vp.filesystem_path.resolve():
-            return {"error": "file_already_exists", "message": f"Destination file already exists: {dst}"}
 
         dst_vp.filesystem_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -699,10 +649,6 @@ async def vault_backlinks(path: str) -> dict:
             vp = VaultPath(path)
         except ValueError as e:
             return {"error": "invalid_path", "message": str(e)}
-
-        path_err = _check_markdown_file_path(vp, path)
-        if path_err:
-            return path_err
 
         if not vp.exists() or not vp.is_file():
             return {"error": "file_not_found", "message": f"File not found: {path}"}
