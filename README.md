@@ -47,7 +47,7 @@ python install_agent.py --uninstall --platform opencode
 
 ## Run E2E tests
 
-The E2E runner starts both the memory server container and a test container, runs the Python Scenario 1 entrypoint (`e2e_test/e2e_scenario1.py`), installs the actual OpenCode integration, runs `opencode run` against a fake OpenAI-compatible provider, verifies the KLONA mental model is injected into the model request, uninstalls KLONA, and cleans up automatically.
+The E2E runner starts isolated Docker Compose projects for each scenario and runs them one by one. Each scenario seeds a fresh runtime vault volume from `e2e_test/test_vault` with a one-shot `vault-seeder` container, starts the memory server on that initialized volume, then runs a test container that can access the vault only through MCP. Scenario 1 installs the actual OpenCode integration, runs `opencode run` against a fake OpenAI-compatible provider, verifies the KLONA mental model is injected into the model request, uninstalls KLONA, and cleans up automatically. Scenario 2 calls the memory MCP tools and auth/health endpoints directly.
 
 Requires Docker Compose v2 and a running Docker daemon.
 

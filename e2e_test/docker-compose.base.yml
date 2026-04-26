@@ -1,0 +1,46 @@
+services:
+  vault-seeder:
+    image: alpine:3.20
+    volumes:
+      - ./test_vault:/source-vault:ro
+      - e2e-runtime-vault:/runtime-vault
+    command:
+      - sh
+      - -c
+      - |
+        rm -rf /runtime-vault/* /runtime-vault/.[!.]* /runtime-vault/..?* 2>/dev/null || true
+        cp -a /source-vault/. /runtime-vault/
+
+  test-memory-server:
+    build:
+      context: ../memory_server
+    environment:
+      - AUTH_TOKEN=e2e-token
+      - VAULT_DIR=/vault
+      - ALLOWED_HOSTS=test-memory-server:8000,test-env:*,localhost:8000
+    volumes:
+      - e2e-runtime-vault:/vault
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  test-env:
+    build:
+      context: ..
+      dockerfile: e2e_test/Dockerfile
+    user: test_user
+    depends_on:
+      test-memory-server:
+        condition: service_healthy
+    environment:
+      - HOME=/home/test_user
+      - KLONA_E2E_MCP_URL=http://test-memory-server:8000/mcp
+      - KLONA_E2E_TOKEN=e2e-token
+    volumes:
+      - ..:/workspace/KLONA
+    working_dir: /workspace/KLONA
+
+volumes:
+  e2e-runtime-vault:

@@ -8,7 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 E2E_DIR = ROOT / "e2e_test"
 OLD_E2E_DIR = ROOT / "sandbox"
-COMPOSE = E2E_DIR / "docker-compose.e2e.yml"
+BASE_COMPOSE = E2E_DIR / "docker-compose.base.yml"
+SCENARIO1_COMPOSE = E2E_DIR / "docker-compose.scenario1.yml"
+SCENARIO2_COMPOSE = E2E_DIR / "docker-compose.scenario2.yml"
+LEGACY_COMPOSE = E2E_DIR / "docker-compose.e2e.yml"
 DOCKERFILE = E2E_DIR / "Dockerfile"
 RUNNER = E2E_DIR / "run_e2e.sh"
 E2E_RUNNER = E2E_DIR / "e2e_runner.py"
@@ -24,6 +27,21 @@ RARE_MENTAL_MODEL_MARKER = "KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f
 
 
 class SandboxE2EScriptTests(unittest.TestCase):
+    def _service_block(self, content, service_name):
+        marker = f"  {service_name}:\n"
+        lines = content.splitlines(keepends=True)
+        start = next(index for index, line in enumerate(lines) if line == marker)
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            line = lines[index]
+            if line and not line.startswith(" "):
+                end = index
+                break
+            if line.startswith("  ") and not line.startswith("    "):
+                end = index
+                break
+        return "".join(lines[start:end])
+
     def test_legacy_sandbox_scripts_do_not_exist(self):
         self.assertFalse(LEGACY_BUILD.exists(), "sandbox/build.sh should not exist")
         self.assertFalse(LEGACY_START_DOCKER.exists(), "sandbox/start_docker.sh should not exist")
@@ -39,9 +57,10 @@ class SandboxE2EScriptTests(unittest.TestCase):
             path = OLD_E2E_DIR / relative_path
             self.assertFalse(path.exists(), f"{path.relative_to(ROOT)} should not exist")
 
-    def test_compose_defines_test_memory_server_and_test_env(self):
-        content = COMPOSE.read_text()
+    def test_split_compose_defines_isolated_base_services(self):
+        content = BASE_COMPOSE.read_text()
 
+        self.assertIn("vault-seeder:", content)
         self.assertIn("test-memory-server:", content)
         self.assertNotRegex(content, r"(?m)^  memory-server:\s*$")
         self.assertIn("test-env:", content)
@@ -56,9 +75,25 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("user: test_user", content)
         self.assertIn("HOME=/home/test_user", content)
         self.assertIn("http://test-memory-server:8000/mcp", content)
-        self.assertIn('command: ["python3", "e2e_test/e2e_runner.py"]', content)
+
+        seeder_block = self._service_block(content, "vault-seeder")
+        self.assertIn("./test_vault:/source-vault:ro", seeder_block)
+        self.assertIn("e2e-runtime-vault:/runtime-vault", seeder_block)
+        self.assertIn("rm -rf", seeder_block)
+        self.assertIn("cp -a", seeder_block)
+
+        memory_block = self._service_block(content, "test-memory-server")
+        self.assertIn("e2e-runtime-vault:/vault", memory_block)
+        self.assertNotIn("vault-seeder", memory_block)
+        self.assertNotIn("service_completed_successfully", memory_block)
+
+        test_env_block = self._service_block(content, "test-env")
+        self.assertNotIn("e2e-runtime-vault", test_env_block)
+        self.assertNotIn("/runtime-vault", test_env_block)
+        self.assertNotIn("/vault", test_env_block)
+        self.assertNotIn("command:", test_env_block)
+
         self.assertIn("e2e-runtime-vault:/vault", content)
-        self.assertIn("e2e-runtime-vault:/runtime-vault", content)
         self.assertIn("volumes:", content)
         self.assertNotIn("./test_vault:/vault", content)
         self.assertNotIn("sandbox/e2e_test.sh", content)
@@ -66,6 +101,21 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertNotIn("HOME=/tmp/klona-e2e-home", content)
         self.assertNotIn("http://memory-server:8000/mcp", content)
         self.assertNotIn("ALLOWED_HOSTS=memory-server:8000", content)
+
+    def test_scenario_compose_files_run_direct_scenario_commands(self):
+        scenario1 = SCENARIO1_COMPOSE.read_text()
+        scenario2 = SCENARIO2_COMPOSE.read_text()
+
+        self.assertIn('command: ["python3", "-B", "e2e_test/e2e_scenario1.py"]', scenario1)
+        self.assertIn('command: ["python3", "-B", "e2e_test/e2e_scenario2.py"]', scenario2)
+        self.assertNotIn("e2e_runner.py", scenario1)
+        self.assertNotIn("e2e_runner.py", scenario2)
+        self.assertNotIn("e2e-runtime-vault", scenario1)
+        self.assertNotIn("e2e-runtime-vault", scenario2)
+
+    def test_legacy_unified_compose_and_runner_do_not_exist(self):
+        self.assertFalse(LEGACY_COMPOSE.exists(), "old unified compose should be replaced by split compose files")
+        self.assertFalse(E2E_RUNNER.exists(), "test-env should run scenario files directly")
 
     def test_dockerfile_creates_test_user_with_normal_home(self):
         content = DOCKERFILE.read_text()
@@ -88,26 +138,39 @@ class SandboxE2EScriptTests(unittest.TestCase):
         content = RUNNER.read_text()
         self.assertIn("set -euo pipefail", content)
         self.assertIn("docker compose", content)
-        self.assertIn('PROJECT_NAME="e2e-test"', content)
+        self.assertIn("SCENARIOS=", content)
+        self.assertIn("scenario1", content)
+        self.assertIn("scenario2", content)
+        self.assertIn('PROJECT_NAME="e2e-test-${scenario}"', content)
+        self.assertIn('docker-compose.base.yml', content)
+        self.assertIn('docker-compose.${scenario}.yml', content)
         self.assertIn('-p "$PROJECT_NAME"', content)
+        self.assertIn('for scenario in "${SCENARIOS[@]}"', content)
         self.assertIn("--abort-on-container-exit", content)
         self.assertIn("--exit-code-from test-env", content)
         self.assertIn("down -v", content)
-        self.assertIn("trap cleanup EXIT", content)
+        self.assertIn("--remove-orphans", content)
         self.assertIn("cleanup_status", content)
         self.assertIn("WARNING", content)
+        self.assertIn("test_vault", content)
+        self.assertIn("sha256", content)
 
-    def test_e2e_runner_runs_all_scenarios_and_resets_runtime_vault(self):
-        content = E2E_RUNNER.read_text()
+    def test_run_e2e_seeds_vault_before_targeted_scenario_up(self):
+        content = RUNNER.read_text()
 
-        self.assertIn("RUNTIME_VAULT_DIR", content)
-        self.assertIn("SOURCE_VAULT_DIR", content)
-        self.assertIn("copytree", content)
-        self.assertIn("e2e_scenario1.py", content)
-        self.assertIn("e2e_scenario2.py", content)
-        self.assertIn("reset_runtime_vault", content)
-        self.assertIn("assert_source_vault_unchanged", content)
-        self.assertNotIn("opencode", content)
+        self.assertIn('run --rm vault-seeder', content)
+        self.assertIn(
+            'up --build --abort-on-container-exit --exit-code-from test-env test-memory-server test-env',
+            content,
+        )
+        self.assertLess(
+            content.index('cleanup_project "$PROJECT_NAME" "$scenario_compose_file"'),
+            content.index('run --rm vault-seeder'),
+        )
+        self.assertLess(
+            content.index('run --rm vault-seeder'),
+            content.index('up --build --abort-on-container-exit --exit-code-from test-env'),
+        )
 
     def test_run_e2e_returns_cleanup_failure_after_successful_tests(self):
         with tempfile.TemporaryDirectory() as temp_dir:

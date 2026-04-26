@@ -1,0 +1,3 @@
+services:
+  test-env:
+    command: ["python3", "-B", "e2e_test/e2e_scenario1.py"]
