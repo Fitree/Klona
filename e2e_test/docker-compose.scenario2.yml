@@ -1,0 +1,6 @@
+services:
+  test-memory-server:
+    container_name: e2e-scenario2-test-memory-server
+  test-env:
+    container_name: e2e-scenario2-test-env
+    command: ["python3", "-B", "e2e_test/e2e_scenario2.py"]
