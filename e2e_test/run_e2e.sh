@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-COMPOSE_FILE="$REPO_ROOT/sandbox/docker-compose.e2e.yml"
-PROJECT_NAME="sandbox"
+COMPOSE_FILE="$REPO_ROOT/e2e_test/docker-compose.e2e.yml"
+PROJECT_NAME="e2e-test"
 
 cleanup() {
   local status=$?

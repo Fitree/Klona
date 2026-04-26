@@ -6,16 +6,18 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-COMPOSE = ROOT / "sandbox" / "docker-compose.e2e.yml"
-DOCKERFILE = ROOT / "sandbox" / "Dockerfile"
-RUNNER = ROOT / "sandbox" / "run_e2e.sh"
-INNER = ROOT / "sandbox" / "e2e_scenario1.py"
+E2E_DIR = ROOT / "e2e_test"
+OLD_E2E_DIR = ROOT / "sandbox"
+COMPOSE = E2E_DIR / "docker-compose.e2e.yml"
+DOCKERFILE = E2E_DIR / "Dockerfile"
+RUNNER = E2E_DIR / "run_e2e.sh"
+INNER = E2E_DIR / "e2e_scenario1.py"
 OLD_SCENARIO1_SHELL = ROOT / "sandbox" / "e2e_scenario1.sh"
 OLD_INNER = ROOT / "sandbox" / "e2e_test.sh"
 LEGACY_BUILD = ROOT / "sandbox" / "build.sh"
 LEGACY_START_DOCKER = ROOT / "sandbox" / "start_docker.sh"
 README = ROOT / "README.md"
-MENTAL_MODEL = ROOT / "sandbox" / "test_vault" / "MENTAL_MODEL.md"
+MENTAL_MODEL = E2E_DIR / "test_vault" / "MENTAL_MODEL.md"
 RARE_MENTAL_MODEL_MARKER = "KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"
 
 
@@ -24,13 +26,24 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertFalse(LEGACY_BUILD.exists(), "sandbox/build.sh should not exist")
         self.assertFalse(LEGACY_START_DOCKER.exists(), "sandbox/start_docker.sh should not exist")
 
+    def test_old_intended_sandbox_e2e_files_do_not_exist(self):
+        for relative_path in [
+            "Dockerfile",
+            "docker-compose.e2e.yml",
+            "e2e_scenario1.py",
+            "run_e2e.sh",
+            "test_vault/MENTAL_MODEL.md",
+        ]:
+            path = OLD_E2E_DIR / relative_path
+            self.assertFalse(path.exists(), f"{path.relative_to(ROOT)} should not exist")
+
     def test_compose_defines_test_memory_server_and_test_env(self):
         content = COMPOSE.read_text()
 
         self.assertIn("test-memory-server:", content)
         self.assertNotRegex(content, r"(?m)^  memory-server:\s*$")
         self.assertIn("test-env:", content)
-        self.assertIn("dockerfile: sandbox/Dockerfile", content)
+        self.assertIn("dockerfile: e2e_test/Dockerfile", content)
         self.assertIn("context: ../memory_server", content)
         self.assertIn("AUTH_TOKEN=e2e-token", content)
         self.assertIn("VAULT_DIR=/vault", content)
@@ -41,7 +54,7 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("user: test_user", content)
         self.assertIn("HOME=/home/test_user", content)
         self.assertIn("http://test-memory-server:8000/mcp", content)
-        self.assertIn('command: ["python3", "sandbox/e2e_scenario1.py"]', content)
+        self.assertIn('command: ["python3", "e2e_test/e2e_scenario1.py"]', content)
         self.assertIn("./test_vault:/vault", content)
         self.assertNotIn("sandbox/e2e_test.sh", content)
         self.assertNotIn("HOME=/home/ubuntu", content)
@@ -66,12 +79,12 @@ class SandboxE2EScriptTests(unittest.TestCase):
 
     def test_run_e2e_is_executable_and_cleans_up(self):
         mode = RUNNER.stat().st_mode
-        self.assertTrue(mode & stat.S_IXUSR, "sandbox/run_e2e.sh must be executable")
+        self.assertTrue(mode & stat.S_IXUSR, "e2e_test/run_e2e.sh must be executable")
 
         content = RUNNER.read_text()
         self.assertIn("set -euo pipefail", content)
         self.assertIn("docker compose", content)
-        self.assertIn('PROJECT_NAME="sandbox"', content)
+        self.assertIn('PROJECT_NAME="e2e-test"', content)
         self.assertIn('-p "$PROJECT_NAME"', content)
         self.assertIn("--abort-on-container-exit", content)
         self.assertIn("--exit-code-from test-env", content)
@@ -157,8 +170,9 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("/v1/chat/completions", content)
         self.assertIn("opencode", content)
         self.assertIn("fake/e2e-model", content)
-        self.assertIn("Hello from scenario 1", content)
-        self.assertIn(RARE_MENTAL_MODEL_MARKER, content)
+        self.assertIn('"Hello from scenario 1"', content)
+        self.assertNotIn('prompt = "Hello from scenario 1"', content)
+        self.assertIn("MENTAL_MODEL_FILE", content)
         self.assertIn("<Mental_model>", content)
         self.assertIn('"--uninstall", "--platform", "opencode"', content)
         self.assertIn("klona_memory_server", content)
@@ -187,7 +201,8 @@ class SandboxE2EScriptTests(unittest.TestCase):
     def test_readme_documents_one_command_e2e(self):
         content = README.read_text()
 
-        self.assertIn("sandbox/run_e2e.sh", content)
+        self.assertIn("e2e_test/run_e2e.sh", content)
+        self.assertNotIn("sandbox/run_e2e.sh", content)
         self.assertIn("Docker Compose v2", content)
         self.assertIn("running Docker daemon", content)
         self.assertIn("actual OpenCode", content)

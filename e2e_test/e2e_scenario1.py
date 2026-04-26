@@ -18,6 +18,7 @@ OPENCODE_CONFIG = OPENCODE_CONFIG_DIR / "opencode.json"
 TMP_DIR = Path("/tmp/klona-e2e-scenario1")
 CAPTURE_FILE = TMP_DIR / "fake-provider-capture.jsonl"
 FAKE_PROVIDER_PORT = 4545
+MENTAL_MODEL_FILE = Path(__file__).resolve().parent / "test_vault" / "MENTAL_MODEL.md"
 
 
 def phase(name):
@@ -210,21 +211,87 @@ def start_fake_provider():
     return server, thread
 
 
-def verify_capture():
+def _content_text(content):
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return None
+
+    parts = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, dict):
+            for key in ("text", "content"):
+                value = item.get(key)
+                if isinstance(value, str):
+                    parts.append(value)
+                    break
+    if not parts:
+        return None
+    return "".join(parts)
+
+
+def _captured_user_message_contents():
+    saw_chat_completion = False
+
+    with CAPTURE_FILE.open(encoding="utf-8") as fh:
+        for line_number, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(f"invalid fake provider capture JSONL at line {line_number}: {exc}") from exc
+
+            if record.get("path") != "/v1/chat/completions":
+                continue
+
+            saw_chat_completion = True
+            body = record.get("body")
+            if not isinstance(body, str):
+                raise SystemExit(f"fake provider capture line {line_number} has non-string body")
+            try:
+                request = json.loads(body)
+            except json.JSONDecodeError as exc:
+                raise SystemExit(f"invalid chat completion JSON body at line {line_number}: {exc}") from exc
+
+            messages = request.get("messages")
+            if not isinstance(messages, list):
+                raise SystemExit(f"chat completion request at line {line_number} has no messages array")
+
+            for message in messages:
+                if not isinstance(message, dict) or message.get("role") != "user":
+                    continue
+                content = _content_text(message.get("content"))
+                if content is not None:
+                    return content
+
+    if not saw_chat_completion:
+        raise SystemExit("fake provider did not capture any /v1/chat/completions requests")
+    raise SystemExit("fake provider chat completion capture did not include a user message")
+
+
+def check_mental_model_injection_at_user_message():
     if not CAPTURE_FILE.is_file():
         raise SystemExit(f"fake provider did not capture any requests at {CAPTURE_FILE}")
 
-    text = CAPTURE_FILE.read_text(encoding="utf-8")
-    for needle in [
-        "/v1/chat/completions",
-        "<Mental_model>",
-        "# Dummy E2E Mental Model",
-        "Unique marker: KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62",
-        "</Mental_model>",
-        "Hello from scenario 1",
-    ]:
-        if needle not in text:
-            raise SystemExit(f"missing expected fake provider capture content: {needle}")
+    expected_mental_model = MENTAL_MODEL_FILE.read_text(encoding="utf-8")
+    opener = "<Mental_model>"
+    closer = "</Mental_model>"
+    content = _captured_user_message_contents()
+    opener_index = content.find(opener)
+    if opener_index != -1:
+        inner_start = opener_index + len(opener)
+        closer_index = content.find(closer, inner_start)
+        if closer_index != -1:
+            inner = content[inner_start:closer_index]
+            if inner.strip("\n") == expected_mental_model.strip("\n"):
+                return
+
+    raise SystemExit(
+        "fake provider chat completion user message did not include the exact mental model block"
+    )
 
 
 def verify_uninstall():
@@ -308,7 +375,7 @@ def main():
         )
 
         phase("Verify fake provider captured injected mental model")
-        verify_capture()
+        check_mental_model_injection_at_user_message()
 
         phase("Uninstall KLONA OpenCode integration")
         run(["python3", "install_agent.py", "--uninstall", "--platform", "opencode"])
