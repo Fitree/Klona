@@ -48,13 +48,13 @@ class OpenCodePluginTests(unittest.TestCase):
         self.assertIn("await removePostCompactionInjectionMarker(sessionID)", plugin)
         self.assertIn("post-compaction", plugin)
 
-    def test_plugin_preserves_legacy_session_markers_after_rename(self):
+    def test_plugin_does_not_check_legacy_session_markers_after_rename(self):
         plugin = installer.PLUGIN_SOURCE.read_text()
 
-        self.assertIn("const LEGACY_PLUGIN_STATE_DIR", plugin)
-        self.assertIn('"klona-memory-session"', plugin)
-        self.assertIn("function legacyMarkerFilePath(sessionID)", plugin)
-        self.assertIn("await markerExists(legacyMarkerFilePath(sessionID))", plugin)
+        self.assertNotIn("const LEGACY_PLUGIN_STATE_DIR", plugin)
+        self.assertNotIn('"klona-memory-session"', plugin)
+        self.assertNotIn("function legacyMarkerFilePath(sessionID)", plugin)
+        self.assertNotIn("await markerExists(legacyMarkerFilePath(sessionID))", plugin)
 
     def test_node_is_required_for_true_js_behavioral_plugin_tests(self):
         self.skipTest(

@@ -15,13 +15,6 @@ const PLUGIN_STATE_DIR = path.join(
   "plugin-state",
   "klona-mental-model-injector",
 )
-const LEGACY_PLUGIN_STATE_DIR = path.join(
-  process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
-  "opencode",
-  "plugin-state",
-  "klona-memory-session",
-)
-
 export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
   let resolvedConfig
   const loggedSessions = new Set()
@@ -264,10 +257,6 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
     return path.join(PLUGIN_STATE_DIR, `${sessionID}.json`)
   }
 
-  function legacyMarkerFilePath(sessionID) {
-    return path.join(LEGACY_PLUGIN_STATE_DIR, `${sessionID}.json`)
-  }
-
   function postCompactionMarkerFilePath(sessionID) {
     return path.join(PLUGIN_STATE_DIR, `${sessionID}.post-compaction.json`)
   }
@@ -284,7 +273,6 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
 
   async function claimInjectedSessionMarker(sessionID) {
     try {
-      if (await markerExists(legacyMarkerFilePath(sessionID))) return false
       await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
       await fs.writeFile(
         markerFilePath(sessionID),
