@@ -237,7 +237,6 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
     agent_md = target / "AGENTS.md"
     agent_copy = target / "agents" / "klona-memory.md"
     plugin_copy = target / "plugins" / "klona-mental-model-injector.js"
-    legacy_plugin_copy = target / "plugins" / "klona-memory-session.js"
     _check_required_assets()
     config = _read_json_object(config_path)
     url = (
@@ -255,7 +254,6 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         agent_md: _snapshot_file(agent_md),
         agent_copy: _snapshot_file(agent_copy),
         plugin_copy: _snapshot_file(plugin_copy),
-        legacy_plugin_copy: _snapshot_file(legacy_plugin_copy),
         config_path: _snapshot_file(config_path),
     }
     mutation_started = False
@@ -265,7 +263,6 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         _install_marker_block(agent_md)
         _copy_required_asset(AGENT_SOURCE, agent_copy)
         _copy_required_asset(PLUGIN_SOURCE, plugin_copy)
-        legacy_plugin_copy.unlink(missing_ok=True)
         _install_mcp_config(config_path, url, token, config)
     except BaseException:
         if mutation_started:
@@ -282,7 +279,6 @@ def uninstall() -> None:
     for path in [
         target / "agents" / "klona-memory.md",
         target / "plugins" / "klona-mental-model-injector.js",
-        target / "plugins" / "klona-memory-session.js",
     ]:
         if path.exists():
             path.unlink()

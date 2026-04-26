@@ -7,8 +7,7 @@ const MCP_ACCEPT_HEADER = "application/json, text/event-stream"
 const INITIAL_CONTEXT_OPEN = "<Mental_model>\n"
 const INITIAL_CONTEXT_CLOSE = "\n</Mental_model>"
 const DEFAULT_MCP_NAME = "klona_memory_server"
-const MENTAL_MODEL_FILE_PATH = "/MENTAL_MODEL.md"
-const MENTAL_MODEL_MARKER = "mental-model-v1"
+const MENTAL_MODEL_VAULT_PATH = "/MENTAL_MODEL.md"
 const PLUGIN_STATE_DIR = path.join(
   process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
   "opencode",
@@ -236,14 +235,14 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
         params: {
           name: "vault_read",
           arguments: {
-            path: MENTAL_MODEL_FILE_PATH,
+            path: MENTAL_MODEL_VAULT_PATH,
           },
         },
       },
     })
 
     if (call.payload?.error) {
-      throw new Error(call.payload.error.message || `MCP tool call failed for ${MENTAL_MODEL_FILE_PATH}`)
+      throw new Error(call.payload.error.message || `MCP tool call failed for ${MENTAL_MODEL_VAULT_PATH}`)
     }
 
     if (isMissingMentalModelResult(call.payload?.result)) {
@@ -253,110 +252,42 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
     return extractMemoryContent(call.payload?.result)
   }
 
-  function markerFilePath(sessionID) {
+  function injectionStatusFilePath(sessionID) {
     return path.join(PLUGIN_STATE_DIR, `${sessionID}.json`)
   }
 
-  function postCompactionMarkerFilePath(sessionID) {
-    return path.join(PLUGIN_STATE_DIR, `${sessionID}.post-compaction.json`)
-  }
-
-  async function markerExists(filePath) {
+  async function readInjectionStatus(sessionID) {
     try {
-      await fs.access(filePath)
-      return true
+      const raw = await fs.readFile(injectionStatusFilePath(sessionID), "utf8")
+      return JSON.parse(raw)
     } catch (error) {
-      if (error?.code === "ENOENT") return false
+      if (error?.code === "ENOENT") return null
       throw error
     }
   }
 
-  async function claimInjectedSessionMarker(sessionID) {
-    try {
-      await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
-      await fs.writeFile(
-        markerFilePath(sessionID),
-        JSON.stringify({
-          sessionID,
-          marker: MENTAL_MODEL_MARKER,
-          path: MENTAL_MODEL_FILE_PATH,
-          time: new Date().toISOString(),
-        }, null, 2),
-        { flag: "wx" },
-      )
-      return true
-    } catch (error) {
-      if (error?.code === "EEXIST") return false
-      throw error
-    }
+  async function writeInjectionStatus(sessionID, status) {
+    await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
+    await fs.writeFile(
+      injectionStatusFilePath(sessionID),
+      JSON.stringify(status, null, 2),
+    )
   }
 
-  async function ensureInjectedSessionMarker(sessionID) {
-    try {
-      await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
-      await fs.writeFile(
-        markerFilePath(sessionID),
-        JSON.stringify({
-          sessionID,
-          marker: MENTAL_MODEL_MARKER,
-          path: MENTAL_MODEL_FILE_PATH,
-          time: new Date().toISOString(),
-        }, null, 2),
-        { flag: "wx" },
-      )
-    } catch (error) {
-      if (error?.code === "EEXIST") return
-      throw error
-    }
+  async function ensureInjectionStatus(sessionID) {
+    const status = await readInjectionStatus(sessionID)
+    if (status) return status
+
+    const initialStatus = { should_inject: true, reason: "first-user-message" }
+    await writeInjectionStatus(sessionID, initialStatus)
+    return initialStatus
   }
 
-  async function removeInjectedSessionMarker(sessionID) {
+  async function markSessionNeedsInjection(sessionID) {
     try {
-      await fs.unlink(markerFilePath(sessionID))
-    } catch {
-      // Best-effort cleanup only.
-    }
-  }
-
-  async function markSessionNeedsPostCompactionInjection(sessionID) {
-    try {
-      await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
-      await fs.writeFile(
-        postCompactionMarkerFilePath(sessionID),
-        JSON.stringify({
-          sessionID,
-          marker: MENTAL_MODEL_MARKER,
-          reason: "post-compaction",
-          path: MENTAL_MODEL_FILE_PATH,
-          time: new Date().toISOString(),
-        }, null, 2),
-      )
+      await writeInjectionStatus(sessionID, { should_inject: true, reason: "post-compaction" })
     } catch (error) {
       await log("warn", "Failed to mark session for post-compaction MENTAL_MODEL.md injection", {
-        sessionID,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-
-  async function hasPostCompactionInjectionMarker(sessionID) {
-    try {
-      return await markerExists(postCompactionMarkerFilePath(sessionID))
-    } catch (error) {
-      await log("warn", "Failed to check post-compaction MENTAL_MODEL.md injection marker", {
-        sessionID,
-        error: error instanceof Error ? error.message : String(error),
-      })
-      return false
-    }
-  }
-
-  async function removePostCompactionInjectionMarker(sessionID) {
-    try {
-      await fs.unlink(postCompactionMarkerFilePath(sessionID))
-    } catch (error) {
-      if (error?.code === "ENOENT") return
-      await log("warn", "Failed to remove post-compaction MENTAL_MODEL.md injection marker", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       })
@@ -401,7 +332,6 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
       firstTextPart.metadata = {
         ...(firstTextPart.metadata ?? {}),
         plugin: "klona-mental-model-injector",
-        marker: MENTAL_MODEL_MARKER,
         prepended: true,
       }
       return true
@@ -421,71 +351,55 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
       const sessionID = compactedSessionID(event)
       if (!sessionID) return
 
-      await markSessionNeedsPostCompactionInjection(sessionID)
+      await markSessionNeedsInjection(sessionID)
     },
 
     "chat.message": async ({ sessionID, agent }, output) => {
       if (!sessionID) return
       if (!(await isRootSession(sessionID))) return
 
-      let claimedMarker = false
       let injected = false
 
       try {
-        const shouldInjectAfterCompaction = await hasPostCompactionInjectionMarker(sessionID)
-        if (!shouldInjectAfterCompaction) claimedMarker = await claimInjectedSessionMarker(sessionID)
-        if (!claimedMarker && !shouldInjectAfterCompaction) return
+        const status = await ensureInjectionStatus(sessionID)
+        if (status.should_inject === false) return
 
         const memoryContent = await readMentalModel()
 
         if (!memoryContent) {
-          if (claimedMarker) await removeInjectedSessionMarker(sessionID)
-          claimedMarker = false
-
           if (!loggedSessions.has(sessionID)) {
             loggedSessions.add(sessionID)
             await log("debug", "Skipping MENTAL_MODEL.md injection because the file is missing or empty", {
               sessionID,
               agent,
-              path: MENTAL_MODEL_FILE_PATH,
+              path: MENTAL_MODEL_VAULT_PATH,
             })
           }
           return
         }
 
         injected = prependMentalModelToFirstTextPart(output, memoryContent)
-        if (!injected) {
-          if (claimedMarker) await removeInjectedSessionMarker(sessionID)
-          claimedMarker = false
-          return
-        }
+        if (!injected) return
 
-        if (shouldInjectAfterCompaction) {
-          await ensureInjectedSessionMarker(sessionID)
-          await removePostCompactionInjectionMarker(sessionID)
-        }
+        await writeInjectionStatus(sessionID, { should_inject: false })
 
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
           await log("info", "Prepended MENTAL_MODEL.md into the first user message", {
             sessionID,
             agent,
-            path: MENTAL_MODEL_FILE_PATH,
+            path: MENTAL_MODEL_VAULT_PATH,
             chars: memoryContent.length,
-            markerPath: markerFilePath(sessionID),
+            statusPath: injectionStatusFilePath(sessionID),
           })
         }
       } catch (error) {
-        if (claimedMarker && !injected) {
-          await removeInjectedSessionMarker(sessionID)
-        }
-
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
           await log("warn", "Failed to inject MENTAL_MODEL.md into session user context", {
             sessionID,
             agent,
-            path: MENTAL_MODEL_FILE_PATH,
+            path: MENTAL_MODEL_VAULT_PATH,
             error: error instanceof Error ? error.message : String(error),
           })
         }

@@ -312,7 +312,6 @@ def verify_uninstall():
     for path in [
         OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
         OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js",
-        OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-session.js",
     ]:
         if path.exists():
             raise SystemExit(f"KLONA artifact remains after uninstall: {path}")
