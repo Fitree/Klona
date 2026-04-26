@@ -298,7 +298,7 @@ def verify_uninstall():
     agents_file = OPENCODE_CONFIG_DIR / "AGENTS.md"
     if agents_file.exists():
         content = agents_file.read_text(encoding="utf-8")
-        for marker in ["<!-- KLONA:BEGIN -->", "<!-- KLONA:END -->"]:
+        for marker in ["<Klona_Memory>", "</Klona_Memory>"]:
             if marker in content:
                 raise SystemExit(f"unexpected marker remains in {agents_file}: {marker}")
 

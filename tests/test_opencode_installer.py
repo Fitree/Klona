@@ -8,6 +8,11 @@ from unittest import mock
 
 from klona_agent.opencode import install as installer
 
+NEW_BEGIN_MARKER = "<Klona_Memory>"
+NEW_END_MARKER = "</Klona_Memory>"
+LEGACY_BEGIN_MARKER = "<!-- KLONA:BEGIN -->"
+LEGACY_END_MARKER = "<!-- KLONA:END -->"
+
 
 class OpenCodeInstallerTests(unittest.TestCase):
     def setUp(self):
@@ -58,8 +63,8 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
         self.assertIn("# Existing instructions", second_agent)
         self.assertIn("Keep this.", second_agent)
-        self.assertEqual(second_agent.count(installer.BEGIN_MARKER), 1)
-        self.assertEqual(second_agent.count(installer.END_MARKER), 1)
+        self.assertEqual(second_agent.count(NEW_BEGIN_MARKER), 1)
+        self.assertEqual(second_agent.count(NEW_END_MARKER), 1)
         self.assertEqual(first_agent, second_agent)
 
     def test_duplicate_existing_klona_blocks_collapse_to_one(self):
@@ -67,9 +72,9 @@ class OpenCodeInstallerTests(unittest.TestCase):
         agent.parent.mkdir(parents=True)
         agent.write_text(
             "before\n\n"
-            f"{installer.BEGIN_MARKER}\nold one\n{installer.END_MARKER}\n\n"
+            f"{NEW_BEGIN_MARKER}\nold one\n{NEW_END_MARKER}\n\n"
             "middle\n\n"
-            f"{installer.BEGIN_MARKER}\nold two\n{installer.END_MARKER}\n\n"
+            f"{NEW_BEGIN_MARKER}\nold two\n{NEW_END_MARKER}\n\n"
             "after\n"
         )
 
@@ -81,8 +86,46 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertIn("after", content)
         self.assertNotIn("old one", content)
         self.assertNotIn("old two", content)
-        self.assertEqual(content.count(installer.BEGIN_MARKER), 1)
-        self.assertEqual(content.count(installer.END_MARKER), 1)
+        self.assertEqual(content.count(NEW_BEGIN_MARKER), 1)
+        self.assertEqual(content.count(NEW_END_MARKER), 1)
+
+    def test_reinstall_removes_legacy_marker_block_and_writes_one_new_block(self):
+        agent = self.opencode / "AGENTS.md"
+        agent.parent.mkdir(parents=True)
+        agent.write_text(
+            "before\n\n"
+            f"{LEGACY_BEGIN_MARKER}\nlegacy managed\n{LEGACY_END_MARKER}\n\n"
+            "after\n"
+        )
+
+        self.install_with_prompts()
+        content = self.read_agent()
+
+        self.assertIn("before", content)
+        self.assertIn("after", content)
+        self.assertNotIn("legacy managed", content)
+        self.assertNotIn(LEGACY_BEGIN_MARKER, content)
+        self.assertNotIn(LEGACY_END_MARKER, content)
+        self.assertEqual(content.count(NEW_BEGIN_MARKER), 1)
+        self.assertEqual(content.count(NEW_END_MARKER), 1)
+
+    def test_uninstall_removes_legacy_marker_block_and_preserves_unrelated_agent_content(self):
+        agent = self.opencode / "AGENTS.md"
+        agent.parent.mkdir(parents=True)
+        agent.write_text(
+            "intro\n\n"
+            f"{LEGACY_BEGIN_MARKER}\nlegacy managed\n{LEGACY_END_MARKER}\n\n"
+            "outro\n"
+        )
+
+        self.uninstall()
+        content = self.read_agent()
+
+        self.assertIn("intro", content)
+        self.assertIn("outro", content)
+        self.assertNotIn("legacy managed", content)
+        self.assertNotIn(LEGACY_BEGIN_MARKER, content)
+        self.assertNotIn(LEGACY_END_MARKER, content)
 
     def test_install_creates_mcp_entry_and_preserves_unrelated_config(self):
         config = self.opencode / "opencode.json"
@@ -139,7 +182,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         agent_content = self.read_agent()
         self.assertIn("intro", agent_content)
         self.assertIn("outro", agent_content)
-        self.assertNotIn(installer.BEGIN_MARKER, agent_content)
+        self.assertNotIn(NEW_BEGIN_MARKER, agent_content)
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
         self.assertFalse((self.opencode / "plugins" / "klona-memory-session.js").exists())
         self.assertEqual(extra_agent.read_text(), "custom agent")
@@ -241,7 +284,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
         self.assertEqual(config.read_text(), "{not json")
         self.assertEqual(agent.read_text(), "existing instructions\n")
-        self.assertNotIn(installer.BEGIN_MARKER, agent.read_text())
+        self.assertNotIn(NEW_BEGIN_MARKER, agent.read_text())
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
         self.assertFalse((self.opencode / "plugins" / "klona-memory-session.js").exists())
 

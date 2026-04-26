@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import Any
 
 
-BEGIN_MARKER = "<!-- KLONA:BEGIN -->"
-END_MARKER = "<!-- KLONA:END -->"
+BEGIN_MARKER = "<Klona_Memory>"
+END_MARKER = "</Klona_Memory>"
+LEGACY_BEGIN_MARKER = "<!-- KLONA:BEGIN -->"
+LEGACY_END_MARKER = "<!-- KLONA:END -->"
 MCP_NAME = "klona_memory_server"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -129,8 +131,15 @@ def _check_required_assets() -> None:
 
 
 def _managed_block_pattern() -> re.Pattern[str]:
+    marker_pairs = [
+        (BEGIN_MARKER, END_MARKER),
+        (LEGACY_BEGIN_MARKER, LEGACY_END_MARKER),
+    ]
+    alternatives = [
+        rf"{re.escape(begin)}.*?{re.escape(end)}" for begin, end in marker_pairs
+    ]
     return re.compile(
-        rf"{re.escape(BEGIN_MARKER)}.*?{re.escape(END_MARKER)}",
+        "|".join(alternatives),
         re.DOTALL,
     )
 
