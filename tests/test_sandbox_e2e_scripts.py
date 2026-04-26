@@ -258,7 +258,8 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("AGENTS.md", content)
         self.assertIn("opencode.json", content)
         self.assertIn("agents/klona-memory.md", content)
-        self.assertIn("plugins/klona-memory-session.js", content)
+        self.assertIn("plugins/klona-mental-model-injector.js", content)
+        self.assertIn('plugin-state" / "klona-mental-model-injector"', content)
         self.assertIn("unified_diff", content)
         self.assertIn("ThreadingHTTPServer", content)
         self.assertIn("BaseHTTPRequestHandler", content)
@@ -316,7 +317,7 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertNotIn("clean_scenario_state", content)
         self.assertNotIn("unlink(missing_ok=True)", content)
         self.assertNotIn(
-            'shutil.rmtree(OPENCODE_DATA_DIR / "plugin-state" / "klona-memory-session"',
+            'shutil.rmtree(OPENCODE_DATA_DIR / "plugin-state" / "klona-mental-model-injector"',
             content,
         )
         self.assertIn("shutil.rmtree(TMP_DIR, ignore_errors=True)", content)

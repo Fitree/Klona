@@ -14,6 +14,7 @@ from pathlib import Path
 
 HOME = Path(os.environ.get("HOME", ""))
 OPENCODE_CONFIG_DIR = HOME / ".config" / "opencode"
+OPENCODE_DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share")) / "opencode"
 OPENCODE_CONFIG = OPENCODE_CONFIG_DIR / "opencode.json"
 TMP_DIR = Path("/tmp/klona-e2e-scenario1")
 CAPTURE_FILE = TMP_DIR / "fake-provider-capture.jsonl"
@@ -294,6 +295,12 @@ def check_mental_model_injection_at_user_message():
     )
 
 
+def check_mental_model_injector_state_dir():
+    state_dir = OPENCODE_DATA_DIR / "plugin-state" / "klona-mental-model-injector"
+    if not state_dir.is_dir():
+        raise SystemExit(f"mental model injector state dir is missing: {state_dir}")
+
+
 def verify_uninstall():
     agents_file = OPENCODE_CONFIG_DIR / "AGENTS.md"
     if agents_file.exists():
@@ -304,6 +311,7 @@ def verify_uninstall():
 
     for path in [
         OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
+        OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js",
         OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-session.js",
     ]:
         if path.exists():
@@ -338,14 +346,14 @@ def main():
         require_file(OPENCODE_CONFIG_DIR / "AGENTS.md")
         require_file(OPENCODE_CONFIG)
         require_file(OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md")
-        require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-session.js")
+        require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js")
         assert_file_matches(
             "klona_agent/opencode/assets/agents/klona-memory.md",
             OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
         )
         assert_file_matches(
-            "klona_agent/opencode/assets/plugins/klona-memory-session.js",
-            OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-session.js",
+            "klona_agent/opencode/assets/plugins/klona-mental-model-injector.js",
+            OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js",
         )
 
         phase("Configure fake OpenAI-compatible provider")
@@ -376,6 +384,7 @@ def main():
 
         phase("Verify fake provider captured injected mental model")
         check_mental_model_injection_at_user_message()
+        check_mental_model_injector_state_dir()
 
         phase("Uninstall KLONA OpenCode integration")
         run(["python3", "install_agent.py", "--uninstall", "--platform", "opencode"])

@@ -13,10 +13,16 @@ const PLUGIN_STATE_DIR = path.join(
   process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
   "opencode",
   "plugin-state",
+  "klona-mental-model-injector",
+)
+const LEGACY_PLUGIN_STATE_DIR = path.join(
+  process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
+  "opencode",
+  "plugin-state",
   "klona-memory-session",
 )
 
-export const KlonaMemorySessionPlugin = async ({ client }) => {
+export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
   let resolvedConfig
   const loggedSessions = new Set()
 
@@ -24,7 +30,7 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
     try {
       await client.app.log({
         body: {
-          service: "klona-memory-session",
+          service: "klona-mental-model-injector",
           level,
           message,
           extra,
@@ -149,7 +155,7 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
           clientInfo: {
-            name: "klona-memory-session-plugin",
+            name: "klona-mental-model-injector-plugin",
             version: "1.0.0",
           },
         },
@@ -258,8 +264,27 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
     return path.join(PLUGIN_STATE_DIR, `${sessionID}.json`)
   }
 
+  function legacyMarkerFilePath(sessionID) {
+    return path.join(LEGACY_PLUGIN_STATE_DIR, `${sessionID}.json`)
+  }
+
+  function postCompactionMarkerFilePath(sessionID) {
+    return path.join(PLUGIN_STATE_DIR, `${sessionID}.post-compaction.json`)
+  }
+
+  async function markerExists(filePath) {
+    try {
+      await fs.access(filePath)
+      return true
+    } catch (error) {
+      if (error?.code === "ENOENT") return false
+      throw error
+    }
+  }
+
   async function claimInjectedSessionMarker(sessionID) {
     try {
+      if (await markerExists(legacyMarkerFilePath(sessionID))) return false
       await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
       await fs.writeFile(
         markerFilePath(sessionID),
@@ -278,12 +303,96 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
     }
   }
 
+  async function ensureInjectedSessionMarker(sessionID) {
+    try {
+      await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
+      await fs.writeFile(
+        markerFilePath(sessionID),
+        JSON.stringify({
+          sessionID,
+          marker: MENTAL_MODEL_MARKER,
+          path: MENTAL_MODEL_FILE_PATH,
+          time: new Date().toISOString(),
+        }, null, 2),
+        { flag: "wx" },
+      )
+    } catch (error) {
+      if (error?.code === "EEXIST") return
+      throw error
+    }
+  }
+
   async function removeInjectedSessionMarker(sessionID) {
     try {
       await fs.unlink(markerFilePath(sessionID))
     } catch {
       // Best-effort cleanup only.
     }
+  }
+
+  async function markSessionNeedsPostCompactionInjection(sessionID) {
+    try {
+      await fs.mkdir(PLUGIN_STATE_DIR, { recursive: true })
+      await fs.writeFile(
+        postCompactionMarkerFilePath(sessionID),
+        JSON.stringify({
+          sessionID,
+          marker: MENTAL_MODEL_MARKER,
+          reason: "post-compaction",
+          path: MENTAL_MODEL_FILE_PATH,
+          time: new Date().toISOString(),
+        }, null, 2),
+      )
+    } catch (error) {
+      await log("warn", "Failed to mark session for post-compaction MENTAL_MODEL.md injection", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  async function hasPostCompactionInjectionMarker(sessionID) {
+    try {
+      return await markerExists(postCompactionMarkerFilePath(sessionID))
+    } catch (error) {
+      await log("warn", "Failed to check post-compaction MENTAL_MODEL.md injection marker", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return false
+    }
+  }
+
+  async function removePostCompactionInjectionMarker(sessionID) {
+    try {
+      await fs.unlink(postCompactionMarkerFilePath(sessionID))
+    } catch (error) {
+      if (error?.code === "ENOENT") return
+      await log("warn", "Failed to remove post-compaction MENTAL_MODEL.md injection marker", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
+  function compactedSessionID(event) {
+    const candidates = [
+      event?.event?.sessionID,
+      event?.event?.sessionId,
+      event?.event?.session?.id,
+      event?.event?.properties?.sessionID,
+      event?.event?.properties?.sessionId,
+      event?.event?.payload?.sessionID,
+      event?.event?.payload?.sessionId,
+      event?.sessionID,
+      event?.sessionId,
+      event?.session?.id,
+      event?.properties?.sessionID,
+      event?.properties?.sessionId,
+      event?.payload?.sessionID,
+      event?.payload?.sessionId,
+    ]
+    return candidates.find((value) => typeof value === "string" && value.length > 0)
   }
 
   function wrapMentalModelContent(memoryContent) {
@@ -303,7 +412,7 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
       firstTextPart.synthetic = false
       firstTextPart.metadata = {
         ...(firstTextPart.metadata ?? {}),
-        plugin: "klona-memory-session",
+        plugin: "klona-mental-model-injector",
         marker: MENTAL_MODEL_MARKER,
         prepended: true,
       }
@@ -318,6 +427,15 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
       resolvedConfig = config
     },
 
+    event: async (event) => {
+      if (!(event?.event?.type === "session.compacted" || event?.type === "session.compacted")) return
+
+      const sessionID = compactedSessionID(event)
+      if (!sessionID) return
+
+      await markSessionNeedsPostCompactionInjection(sessionID)
+    },
+
     "chat.message": async ({ sessionID, agent }, output) => {
       if (!sessionID) return
       if (!(await isRootSession(sessionID))) return
@@ -326,13 +444,14 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
       let injected = false
 
       try {
-        claimedMarker = await claimInjectedSessionMarker(sessionID)
-        if (!claimedMarker) return
+        const shouldInjectAfterCompaction = await hasPostCompactionInjectionMarker(sessionID)
+        if (!shouldInjectAfterCompaction) claimedMarker = await claimInjectedSessionMarker(sessionID)
+        if (!claimedMarker && !shouldInjectAfterCompaction) return
 
         const memoryContent = await readMentalModel()
 
         if (!memoryContent) {
-          await removeInjectedSessionMarker(sessionID)
+          if (claimedMarker) await removeInjectedSessionMarker(sessionID)
           claimedMarker = false
 
           if (!loggedSessions.has(sessionID)) {
@@ -348,9 +467,14 @@ export const KlonaMemorySessionPlugin = async ({ client }) => {
 
         injected = prependMentalModelToFirstTextPart(output, memoryContent)
         if (!injected) {
-          await removeInjectedSessionMarker(sessionID)
+          if (claimedMarker) await removeInjectedSessionMarker(sessionID)
           claimedMarker = false
           return
+        }
+
+        if (shouldInjectAfterCompaction) {
+          await ensureInjectedSessionMarker(sessionID)
+          await removePostCompactionInjectionMarker(sessionID)
         }
 
         if (!loggedSessions.has(sessionID)) {
