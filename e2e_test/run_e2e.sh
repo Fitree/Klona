@@ -4,24 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 BASE_COMPOSE_FILE="$REPO_ROOT/e2e_test/docker-compose.base.yml"
-SOURCE_VAULT_DIR="$REPO_ROOT/e2e_test/test_vault"
 SCENARIOS=(scenario1 scenario2)
-
-source_vault_sha256() {
-  python3 - "$SOURCE_VAULT_DIR" <<'PY'
-import hashlib
-import json
-import sys
-from pathlib import Path
-
-source = Path(sys.argv[1])
-hashes = {}
-for path in sorted(source.rglob("*")):
-    if path.is_file():
-        hashes[path.relative_to(source).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
-print(json.dumps(hashes, sort_keys=True))
-PY
-}
 
 cleanup_project() {
   local project_name="$1"
@@ -88,7 +71,6 @@ run_scenario() {
 }
 
 cd "$REPO_ROOT"
-initial_source_vault_sha256="$(source_vault_sha256)"
 overall_status=0
 
 for scenario in "${SCENARIOS[@]}"; do
@@ -102,13 +84,5 @@ for scenario in "${SCENARIOS[@]}"; do
     break
   fi
 done
-
-final_source_vault_sha256="$(source_vault_sha256)"
-if [[ "$initial_source_vault_sha256" != "$final_source_vault_sha256" ]]; then
-  printf 'WARNING: e2e_test/test_vault fixture changed during E2E run\n' >&2
-  if [[ "$overall_status" -eq 0 ]]; then
-    overall_status=9
-  fi
-fi
 
 exit "$overall_status"

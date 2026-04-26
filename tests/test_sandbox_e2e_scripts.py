@@ -78,12 +78,15 @@ class SandboxE2EScriptTests(unittest.TestCase):
 
         seeder_block = self._service_block(content, "vault-seeder")
         self.assertIn("./test_vault:/source-vault:ro", seeder_block)
+        self.assertEqual(content.count("./test_vault:/source-vault:ro"), 1)
         self.assertIn("e2e-runtime-vault:/runtime-vault", seeder_block)
         self.assertIn("rm -rf", seeder_block)
         self.assertIn("cp -a", seeder_block)
 
         memory_block = self._service_block(content, "test-memory-server")
         self.assertIn("e2e-runtime-vault:/vault", memory_block)
+        self.assertNotIn("./test_vault", memory_block)
+        self.assertNotIn("/source-vault", memory_block)
         self.assertNotIn("vault-seeder", memory_block)
         self.assertNotIn("service_completed_successfully", memory_block)
 
@@ -91,6 +94,8 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertNotIn("e2e-runtime-vault", test_env_block)
         self.assertNotIn("/runtime-vault", test_env_block)
         self.assertNotIn("/vault", test_env_block)
+        self.assertNotIn("./test_vault", test_env_block)
+        self.assertNotIn("/source-vault", test_env_block)
         self.assertNotIn("command:", test_env_block)
 
         self.assertIn("e2e-runtime-vault:/vault", content)
@@ -152,8 +157,9 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("--remove-orphans", content)
         self.assertIn("cleanup_status", content)
         self.assertIn("WARNING", content)
-        self.assertIn("test_vault", content)
-        self.assertIn("sha256", content)
+        self.assertNotIn("source_vault_sha256", content)
+        self.assertNotIn("sha256", content)
+        self.assertNotIn("hashlib", content)
 
     def test_run_e2e_seeds_vault_before_targeted_scenario_up(self):
         content = RUNNER.read_text()

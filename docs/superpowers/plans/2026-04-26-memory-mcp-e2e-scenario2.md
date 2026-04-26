@@ -15,7 +15,7 @@
 - Modify `tests/test_sandbox_e2e_scripts.py` to add RED coverage for split Compose files, isolated per-scenario projects, per-scenario vault seeding, and direct Scenario 2 MCP calls.
 - Create `e2e_test/docker-compose.base.yml` with shared services and the `vault-seeder` that copies `e2e_test/test_vault` into the runtime vault.
 - Create `e2e_test/docker-compose.scenario1.yml` and `e2e_test/docker-compose.scenario2.yml` as minimal command overlays for each scenario.
-- Update `e2e_test/run_e2e.sh` to run scenarios sequentially with distinct Compose project names, seed the vault before each scenario, clean up each project, and verify source fixture hashes are unchanged.
+- Update `e2e_test/run_e2e.sh` to run scenarios sequentially with distinct Compose project names, seed the vault before each scenario, and clean up each project.
 - Create `e2e_test/e2e_scenario2.py` to call `/health`, `initialize`, `notifications/initialized`, and all required `tools/call` tools directly.
 - Keep `e2e_test/e2e_scenario1.py` behavior intact; it reads expected data from the source fixture while the server reads the copied runtime vault.
 - No `memory_server/src/server.py` changes unless direct E2E execution reveals a real server bug.
@@ -37,4 +37,4 @@
 
 ## Isolation Guarantee
 
-`e2e_test/test_vault` is never mounted as `/vault`. `vault-seeder` copies the fixture into the runtime vault before each scenario. `test-env` has no runtime vault mount; only `test-memory-server` consumes the runtime vault at `/vault`. `run_e2e.sh` runs each scenario in an isolated Compose project, cleans up volumes between scenarios, and compares source fixture file hashes before and after the scenario sequence.
+`e2e_test/test_vault` is mounted only read-only into `vault-seeder` as `/source-vault`. `vault-seeder` copies the fixture into the runtime vault before each scenario. `test-env` has no vault mount; only `test-memory-server` consumes the runtime volume at `/vault`. `run_e2e.sh` runs each scenario in an isolated Compose project and cleans up volumes between scenarios.
