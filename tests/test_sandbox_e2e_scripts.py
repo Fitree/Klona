@@ -260,6 +260,8 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("agents/klona-memory.md", content)
         self.assertIn("plugins/klona-mental-model-injector.js", content)
         self.assertNotIn("klona-memory-session.js", content)
+        self.assertNotIn("XDG_DATA_HOME", content)
+        self.assertIn('HOME / ".local" / "share" / "opencode"', content)
         self.assertIn('plugin-state" / "klona-mental-model-injector"', content)
         self.assertIn("unified_diff", content)
         self.assertIn("ThreadingHTTPServer", content)

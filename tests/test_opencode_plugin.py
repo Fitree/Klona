@@ -49,6 +49,11 @@ class OpenCodePluginTests(unittest.TestCase):
     def test_plugin_uses_one_injection_status_file_per_session(self):
         plugin = installer.PLUGIN_SOURCE.read_text()
 
+        self.assertNotIn("XDG_DATA_HOME", plugin)
+        self.assertIn("const PLUGIN_STATE_DIR = path.join(", plugin)
+        self.assertIn("os.homedir()", plugin)
+        self.assertIn('".local"', plugin)
+        self.assertIn('"share"', plugin)
         self.assertIn("function injectionStatusFilePath(sessionID)", plugin)
         self.assertIn("async function readInjectionStatus(sessionID)", plugin)
         self.assertIn("async function writeInjectionStatus(sessionID, status)", plugin)

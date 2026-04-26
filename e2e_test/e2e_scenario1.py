@@ -14,7 +14,7 @@ from pathlib import Path
 
 HOME = Path(os.environ.get("HOME", ""))
 OPENCODE_CONFIG_DIR = HOME / ".config" / "opencode"
-OPENCODE_DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share")) / "opencode"
+OPENCODE_DATA_DIR = HOME / ".local" / "share" / "opencode"
 OPENCODE_CONFIG = OPENCODE_CONFIG_DIR / "opencode.json"
 TMP_DIR = Path("/tmp/klona-e2e-scenario1")
 CAPTURE_FILE = TMP_DIR / "fake-provider-capture.jsonl"

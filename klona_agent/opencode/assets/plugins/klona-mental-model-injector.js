@@ -9,7 +9,9 @@ const INITIAL_CONTEXT_CLOSE = "\n</Mental_model>"
 const DEFAULT_MCP_NAME = "klona_memory_server"
 const MENTAL_MODEL_VAULT_PATH = "/MENTAL_MODEL.md"
 const PLUGIN_STATE_DIR = path.join(
-  process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"),
+  os.homedir(),
+  ".local",
+  "share",
   "opencode",
   "plugin-state",
   "klona-mental-model-injector",
