@@ -439,13 +439,13 @@ def main():
                 "fake/e2e-model",
                 "--title",
                 session_title,
-                "Hello from scenario 1",
+                "Verify initial KLONA mental model injection",
             ],
             timeout=90,
         )
 
         phase("Verify fake provider captured injected mental model")
-        check_mental_model_injection_at_user_message("Hello from scenario 1")
+        check_mental_model_injection_at_user_message("Verify initial KLONA mental model injection")
         check_mental_model_injector_state_dir()
 
         phase("Find OpenCode session created by first message")
@@ -479,13 +479,13 @@ def main():
                 "fake/e2e-model",
                 "--session",
                 session_id,
-                "Hello after compaction",
+                "Verify KLONA mental model injection after compaction",
             ],
             timeout=90,
         )
 
         phase("Verify fake provider captured post-compaction injected mental model")
-        check_mental_model_injection_at_user_message("Hello after compaction")
+        check_mental_model_injection_at_user_message("Verify KLONA mental model injection after compaction")
 
         phase("Uninstall KLONA OpenCode integration")
         run(["python3", "install_agent.py", "--uninstall", "--platform", "opencode"])
