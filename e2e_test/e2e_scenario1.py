@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +20,7 @@ OPENCODE_CONFIG = OPENCODE_CONFIG_DIR / "opencode.json"
 TMP_DIR = Path("/tmp/klona-e2e-scenario1")
 CAPTURE_FILE = TMP_DIR / "fake-provider-capture.jsonl"
 FAKE_PROVIDER_PORT = 4545
+OPENCODE_SERVE_PORT = 4546
 MENTAL_MODEL_FILE = Path(__file__).resolve().parent / "test_vault" / "MENTAL_MODEL.md"
 
 
@@ -235,6 +237,7 @@ def _content_text(content):
 
 def _captured_user_message_contents():
     saw_chat_completion = False
+    saw_user_message = False
 
     with CAPTURE_FILE.open(encoding="utf-8") as fh:
         for line_number, line in enumerate(fh, start=1):
@@ -266,33 +269,90 @@ def _captured_user_message_contents():
                     continue
                 content = _content_text(message.get("content"))
                 if content is not None:
-                    return content
+                    saw_user_message = True
+                    yield content
 
     if not saw_chat_completion:
         raise SystemExit("fake provider did not capture any /v1/chat/completions requests")
-    raise SystemExit("fake provider chat completion capture did not include a user message")
+    if not saw_user_message:
+        raise SystemExit("fake provider chat completion capture did not include a user message")
 
 
-def check_mental_model_injection_at_user_message():
+def check_mental_model_injection_at_user_message(message_text: str):
     if not CAPTURE_FILE.is_file():
         raise SystemExit(f"fake provider did not capture any requests at {CAPTURE_FILE}")
 
     expected_mental_model = MENTAL_MODEL_FILE.read_text(encoding="utf-8")
-    opener = "<Mental_model>"
-    closer = "</Mental_model>"
-    content = _captured_user_message_contents()
-    opener_index = content.find(opener)
-    if opener_index != -1:
-        inner_start = opener_index + len(opener)
-        closer_index = content.find(closer, inner_start)
-        if closer_index != -1:
-            inner = content[inner_start:closer_index]
-            if inner.strip("\n") == expected_mental_model.strip("\n"):
-                return
+    expected_block = f"<Mental_model>\n{expected_mental_model}</Mental_model>"
+    matching_messages = []
+    for content in _captured_user_message_contents():
+        if message_text not in content:
+            continue
+        matching_messages.append(content)
+        if expected_block in content:
+            return
+
+    if matching_messages:
+        raise SystemExit(
+            f"fake provider captured {len(matching_messages)} user message(s) containing {message_text!r}, but none "
+            "did not include the exact mental model block"
+        )
 
     raise SystemExit(
-        "fake provider chat completion user message did not include the exact mental model block"
+        f"fake provider chat completion capture did not include a user message containing {message_text!r}"
     )
+
+
+def opencode_session_id_for_title(title: str):
+    result = run(
+        ["opencode", "session", "list", "--format", "json"],
+        stdout=subprocess.PIPE,
+        text=True,
+        timeout=30,
+    )
+    sessions = json.loads(result.stdout)
+    for session in sessions:
+        if session.get("title") == title:
+            session_id = session.get("id")
+            if not isinstance(session_id, str) or not session_id:
+                raise SystemExit(f"OpenCode session titled {title!r} did not include a string id")
+            return session_id
+
+    raise SystemExit(f"OpenCode session list did not include title {title!r}")
+
+
+def wait_for_opencode_serve(serve_process):
+    deadline = time.time() + 10
+    url = f"http://127.0.0.1:{OPENCODE_SERVE_PORT}"
+    while True:
+        if serve_process.poll() is not None:
+            raise SystemExit(f"opencode serve exited before becoming reachable: {serve_process.returncode}")
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                if response.status < 500:
+                    return
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500:
+                return
+        except Exception:
+            pass
+
+        if time.time() > deadline:
+            raise SystemExit("opencode serve did not become reachable")
+        time.sleep(0.1)
+
+
+def summarize_opencode_session(session_id: str):
+    raw = json.dumps({"providerID": "fake", "modelID": "e2e-model"}).encode("utf-8")
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{OPENCODE_SERVE_PORT}" + f"/session/{session_id}/summarize",
+        data=raw,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        if response.status >= 300:
+            raise SystemExit(f"opencode summarize failed with HTTP {response.status}")
 
 
 def check_mental_model_injector_state_dir():
@@ -331,6 +391,7 @@ def reset_fake_provider_temp():
 def main():
     server = None
     thread = None
+    serve_process = None
     try:
         phase("Verify sandbox user")
         if getpass.getuser() != "test_user":
@@ -364,6 +425,8 @@ def main():
         phase("Start fake OpenAI-compatible provider")
         server, thread = start_fake_provider()
 
+        session_title = f"klona-e2e-scenario1-{os.getpid()}-{int(time.time())}"
+
         phase("Run real OpenCode against fake provider")
         run(
             [
@@ -375,15 +438,54 @@ def main():
                 "--model",
                 "fake/e2e-model",
                 "--title",
-                "klona-e2e-scenario1",
+                session_title,
                 "Hello from scenario 1",
             ],
             timeout=90,
         )
 
         phase("Verify fake provider captured injected mental model")
-        check_mental_model_injection_at_user_message()
+        check_mental_model_injection_at_user_message("Hello from scenario 1")
         check_mental_model_injector_state_dir()
+
+        phase("Find OpenCode session created by first message")
+        session_id = opencode_session_id_for_title(session_title)
+
+        phase("Start OpenCode HTTP API")
+        serve_process = subprocess.Popen(
+            [
+                "opencode",
+                "serve",
+                "--hostname",
+                "127.0.0.1",
+                "--port",
+                str(OPENCODE_SERVE_PORT),
+            ]
+        )
+        wait_for_opencode_serve(serve_process)
+
+        phase("Trigger OpenCode session compaction")
+        summarize_opencode_session(session_id)
+
+        phase("Run real OpenCode against compacted session")
+        run(
+            [
+                "opencode",
+                "run",
+                "--print-logs",
+                "--log-level",
+                "DEBUG",
+                "--model",
+                "fake/e2e-model",
+                "--session",
+                session_id,
+                "Hello after compaction",
+            ],
+            timeout=90,
+        )
+
+        phase("Verify fake provider captured post-compaction injected mental model")
+        check_mental_model_injection_at_user_message("Hello after compaction")
 
         phase("Uninstall KLONA OpenCode integration")
         run(["python3", "install_agent.py", "--uninstall", "--platform", "opencode"])
@@ -393,6 +495,13 @@ def main():
 
         print("\nE2E PASS", flush=True)
     finally:
+        if serve_process is not None:
+            serve_process.terminate()
+            try:
+                serve_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                serve_process.kill()
+                serve_process.wait(timeout=5)
         if server is not None:
             server.shutdown()
             server.server_close()

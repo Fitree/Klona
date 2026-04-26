@@ -39,24 +39,43 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
     def test_valid_user_message_contains_only_exact_mental_model_block(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            user_content = f"<Mental_model>\n{self.mental_model}\n</Mental_model>"
+            user_content = f"<Mental_model>\n{self.mental_model}</Mental_model>\nHello from test"
             self.write_capture(
                 temp_path,
                 [self.chat_record([{"role": "user", "content": user_content}])],
             )
 
-            self.scenario.check_mental_model_injection_at_user_message()
+            self.scenario.check_mental_model_injection_at_user_message("Hello from test")
 
-    def test_valid_user_message_allows_only_leading_wrapper_newline_before_file_content(self):
+    def test_scans_until_user_message_containing_requested_text(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            user_content = f"<Mental_model>\n{self.mental_model}</Mental_model>"
+            wrong_content = f"<Mental_model>\n# Wrong mental model\n</Mental_model>\nOther message"
+            matching_content = f"<Mental_model>\n{self.mental_model}</Mental_model>\nRequested message"
             self.write_capture(
                 temp_path,
-                [self.chat_record([{"role": "user", "content": user_content}])],
+                [
+                    self.chat_record([{"role": "user", "content": wrong_content}]),
+                    self.chat_record([{"role": "user", "content": matching_content}]),
+                ],
             )
 
-            self.scenario.check_mental_model_injection_at_user_message()
+            self.scenario.check_mental_model_injection_at_user_message("Requested message")
+
+    def test_scans_all_requested_messages_until_one_has_mental_model(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            first_match_without_model = "Requested duplicate message"
+            second_match_with_model = f"<Mental_model>\n{self.mental_model}</Mental_model>\nRequested duplicate message"
+            self.write_capture(
+                temp_path,
+                [
+                    self.chat_record([{"role": "user", "content": first_match_without_model}]),
+                    self.chat_record([{"role": "user", "content": second_match_with_model}]),
+                ],
+            )
+
+            self.scenario.check_mental_model_injection_at_user_message("Requested duplicate message")
 
     def test_marker_outside_user_message_does_not_satisfy_injection_check(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -76,7 +95,7 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
             )
 
             with self.assertRaises(SystemExit):
-                self.scenario.check_mental_model_injection_at_user_message()
+                self.scenario.check_mental_model_injection_at_user_message("User message without mental model")
 
     def test_mental_model_block_must_match_file_content_exactly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -95,13 +114,14 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
             )
 
             with self.assertRaises(SystemExit):
-                self.scenario.check_mental_model_injection_at_user_message()
+                self.scenario.check_mental_model_injection_at_user_message("Wrong mental model")
 
-    def test_scenario_uses_direct_stripped_mental_model_comparison(self):
+    def test_scenario_uses_exact_mental_model_block_comparison(self):
         content = SCENARIO.read_text(encoding="utf-8")
 
         self.assertNotIn("_mental_model_matches", content)
-        self.assertIn('inner.strip("\\n") == expected_mental_model.strip("\\n")', content)
+        self.assertIn('expected_block = f"<Mental_model>\\n{expected_mental_model}</Mental_model>"', content)
+        self.assertIn("if expected_block in content:", content)
 
 
 if __name__ == "__main__":
