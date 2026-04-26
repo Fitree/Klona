@@ -113,6 +113,18 @@ class SandboxE2EScriptTests(unittest.TestCase):
 
         self.assertIn('command: ["python3", "-B", "e2e_test/e2e_scenario1.py"]', scenario1)
         self.assertIn('command: ["python3", "-B", "e2e_test/e2e_scenario2.py"]', scenario2)
+        self.assertIn("container_name: e2e-scenario1-test-env", self._service_block(scenario1, "test-env"))
+        self.assertIn(
+            "container_name: e2e-scenario1-test-memory-server",
+            self._service_block(scenario1, "test-memory-server"),
+        )
+        self.assertIn("container_name: e2e-scenario2-test-env", self._service_block(scenario2, "test-env"))
+        self.assertIn(
+            "container_name: e2e-scenario2-test-memory-server",
+            self._service_block(scenario2, "test-memory-server"),
+        )
+        self.assertLess(scenario1.index("  test-memory-server:\n"), scenario1.index("  test-env:\n"))
+        self.assertLess(scenario2.index("  test-memory-server:\n"), scenario2.index("  test-env:\n"))
         self.assertNotIn("e2e_runner.py", scenario1)
         self.assertNotIn("e2e_runner.py", scenario2)
         self.assertNotIn("e2e-runtime-vault", scenario1)
