@@ -11,7 +11,9 @@ OLD_E2E_DIR = ROOT / "sandbox"
 COMPOSE = E2E_DIR / "docker-compose.e2e.yml"
 DOCKERFILE = E2E_DIR / "Dockerfile"
 RUNNER = E2E_DIR / "run_e2e.sh"
+E2E_RUNNER = E2E_DIR / "e2e_runner.py"
 INNER = E2E_DIR / "e2e_scenario1.py"
+SCENARIO2 = E2E_DIR / "e2e_scenario2.py"
 OLD_SCENARIO1_SHELL = ROOT / "sandbox" / "e2e_scenario1.sh"
 OLD_INNER = ROOT / "sandbox" / "e2e_test.sh"
 LEGACY_BUILD = ROOT / "sandbox" / "build.sh"
@@ -54,12 +56,14 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("user: test_user", content)
         self.assertIn("HOME=/home/test_user", content)
         self.assertIn("http://test-memory-server:8000/mcp", content)
-        self.assertIn('command: ["python3", "e2e_test/e2e_scenario1.py"]', content)
-        self.assertIn("./test_vault:/vault", content)
+        self.assertIn('command: ["python3", "e2e_test/e2e_runner.py"]', content)
+        self.assertIn("e2e-runtime-vault:/vault", content)
+        self.assertIn("e2e-runtime-vault:/runtime-vault", content)
+        self.assertIn("volumes:", content)
+        self.assertNotIn("./test_vault:/vault", content)
         self.assertNotIn("sandbox/e2e_test.sh", content)
         self.assertNotIn("HOME=/home/ubuntu", content)
         self.assertNotIn("HOME=/tmp/klona-e2e-home", content)
-        self.assertNotIn("e2e-vault", content)
         self.assertNotIn("http://memory-server:8000/mcp", content)
         self.assertNotIn("ALLOWED_HOSTS=memory-server:8000", content)
 
@@ -92,6 +96,18 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("trap cleanup EXIT", content)
         self.assertIn("cleanup_status", content)
         self.assertIn("WARNING", content)
+
+    def test_e2e_runner_runs_all_scenarios_and_resets_runtime_vault(self):
+        content = E2E_RUNNER.read_text()
+
+        self.assertIn("RUNTIME_VAULT_DIR", content)
+        self.assertIn("SOURCE_VAULT_DIR", content)
+        self.assertIn("copytree", content)
+        self.assertIn("e2e_scenario1.py", content)
+        self.assertIn("e2e_scenario2.py", content)
+        self.assertIn("reset_runtime_vault", content)
+        self.assertIn("assert_source_vault_unchanged", content)
+        self.assertNotIn("opencode", content)
 
     def test_run_e2e_returns_cleanup_failure_after_successful_tests(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -186,6 +202,32 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertNotIn("curl -fsS http://test-memory-server:8000/health", content)
         self.assertNotIn("http://memory-server:8000/health", content)
         self.assertNotIn("http://memory-server:8000/mcp", content)
+
+    def test_scenario2_directly_exercises_memory_server_tools(self):
+        content = SCENARIO2.read_text()
+
+        self.assertIn("urllib.request", content)
+        self.assertIn('"initialize"', content)
+        self.assertIn('"notifications/initialized"', content)
+        self.assertIn('"tools/call"', content)
+        for tool_name in [
+            "vault_tree",
+            "vault_ls",
+            "vault_read",
+            "vault_write",
+            "vault_update",
+            "vault_delete",
+            "vault_move",
+            "vault_mkdir",
+            "vault_grep",
+            "vault_backlinks",
+        ]:
+            self.assertIn(tool_name, content)
+        self.assertIn("Authorization", content)
+        self.assertIn("Bearer", content)
+        self.assertIn("Unauthorized", content)
+        self.assertIn("/health", content)
+        self.assertNotIn("opencode", content.lower())
 
     def test_scenario1_does_not_preclean_opencode_state(self):
         content = INNER.read_text()

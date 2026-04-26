@@ -7,7 +7,7 @@ services:
       - VAULT_DIR=/vault
       - ALLOWED_HOSTS=test-memory-server:8000,test-env:*,localhost:8000
     volumes:
-      - ./test_vault:/vault
+      - e2e-runtime-vault:/vault
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 5s
@@ -28,5 +28,9 @@ services:
       - KLONA_E2E_TOKEN=e2e-token
     volumes:
       - ..:/workspace/KLONA
+      - e2e-runtime-vault:/runtime-vault
     working_dir: /workspace/KLONA
-    command: ["python3", "e2e_test/e2e_scenario1.py"]
+    command: ["python3", "e2e_test/e2e_runner.py"]
+
+volumes:
+  e2e-runtime-vault:
