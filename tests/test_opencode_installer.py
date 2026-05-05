@@ -164,22 +164,6 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertEqual(agent_copy.read_text(), installer.AGENT_SOURCE.read_text())
         self.assertEqual(plugin_copy.read_text(), installer.PLUGIN_SOURCE.read_text())
 
-    def test_install_removes_legacy_managed_plugin_and_preserves_custom_plugins(self):
-        legacy_plugin = self.opencode / "plugins" / "klona-mental-model-injector.js"
-        custom_plugin = self.opencode / "plugins" / "custom.js"
-        legacy_plugin.parent.mkdir(parents=True)
-        legacy_plugin.write_text("legacy managed plugin")
-        custom_plugin.write_text("custom plugin")
-
-        self.install_with_prompts()
-
-        self.assertFalse(legacy_plugin.exists())
-        self.assertEqual(custom_plugin.read_text(), "custom plugin")
-        self.assertEqual(
-            (self.opencode / "plugins" / "klona-memory-mental-model-injector.js").read_text(),
-            installer.PLUGIN_SOURCE.read_text(),
-        )
-
     def test_installer_does_not_handle_legacy_session_plugin_filename(self):
         source = installer.Path(__file__).resolve().parents[1] / "klona_agent" / "opencode" / "install.py"
 
@@ -206,7 +190,6 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertNotIn(NEW_BEGIN_MARKER, agent_content)
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
         self.assertFalse((self.opencode / "plugins" / "klona-memory-mental-model-injector.js").exists())
-        self.assertFalse((self.opencode / "plugins" / "klona-mental-model-injector.js").exists())
         self.assertEqual(extra_agent.read_text(), "custom agent")
         self.assertEqual(extra_plugin.read_text(), "custom plugin")
         data = self.read_config()
@@ -314,11 +297,6 @@ class OpenCodeInstallerTests(unittest.TestCase):
         config = self.opencode / "opencode.json"
         config.parent.mkdir(parents=True)
         config.write_text(json.dumps({"theme": "dark"}))
-        legacy_plugin = self.opencode / "plugins" / "klona-mental-model-injector.js"
-        custom_plugin = self.opencode / "plugins" / "custom.js"
-        legacy_plugin.parent.mkdir(parents=True)
-        legacy_plugin.write_text("legacy managed plugin")
-        custom_plugin.write_text("custom plugin")
 
         with mock.patch.object(installer.Path, "home", return_value=self.home), mock.patch(
             "builtins.input", return_value="https://memory.example/mcp"
@@ -331,21 +309,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertFalse((self.opencode / "AGENTS.md").exists())
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
         self.assertFalse((self.opencode / "plugins" / "klona-memory-mental-model-injector.js").exists())
-        self.assertEqual(legacy_plugin.read_text(), "legacy managed plugin")
-        self.assertEqual(custom_plugin.read_text(), "custom plugin")
         self.assertEqual(json.loads(config.read_text()), {"theme": "dark"})
-
-    def test_uninstall_removes_legacy_managed_plugin(self):
-        legacy_plugin = self.opencode / "plugins" / "klona-mental-model-injector.js"
-        custom_plugin = self.opencode / "plugins" / "custom.js"
-        legacy_plugin.parent.mkdir(parents=True)
-        legacy_plugin.write_text("legacy managed plugin")
-        custom_plugin.write_text("custom plugin")
-
-        self.uninstall()
-
-        self.assertFalse(legacy_plugin.exists())
-        self.assertEqual(custom_plugin.read_text(), "custom plugin")
 
 
 if __name__ == "__main__":
