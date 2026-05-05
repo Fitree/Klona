@@ -15,6 +15,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Mount, Route
 
 from .config import load_settings
+from .constants import MCP_HEALTH_SERVER_NAME, MCP_SERVER_NAME
 from .queue import MemoryQueue
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ transport_security = TransportSecuritySettings(
 )
 
 mcp = FastMCP(
-    "klona-memory-agent",
+    MCP_SERVER_NAME,
     instructions=(
         "High-level KLONA memory tools. Use recall(input) to retrieve relevant memory context "
         "and remember(input) to request durable memory storage."
@@ -93,7 +94,7 @@ class AuthMiddleware:
 
 
 async def health(request: Request) -> Response:
-    return JSONResponse({"status": "ok", "server": "klona-memory-agent", "version": "0.1.0"})
+    return JSONResponse({"status": "ok", "server": MCP_HEALTH_SERVER_NAME, "version": "0.1.0"})
 
 
 @contextlib.asynccontextmanager

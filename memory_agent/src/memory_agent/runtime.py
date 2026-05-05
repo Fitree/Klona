@@ -14,10 +14,17 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .config import load_settings, Settings
+from .constants import (
+    DEFAULT_OPENCODE_HOST,
+    DEFAULT_OPENCODE_PORT,
+    LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN,
+    LOW_LEVEL_MCP_NAME,
+    MEMORY_AGENT_NAME,
+)
 from .system_prompt import MEMORY_AGENT_SYSTEM_PROMPT
 
 
-ALLOWED_TOOL_PATTERN = "klona_memory_server_*"
+ALLOWED_TOOL_PATTERN = LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN
 
 
 @dataclass(frozen=True)
@@ -170,7 +177,7 @@ def generate_opencode_config(settings: Settings, model: str = "", reasoning_effo
     config = {
         "model": selected_model,
         "agent": {
-            "klona-memory": {
+            MEMORY_AGENT_NAME: {
                 **agent_model_config,
                 "mode": "primary",
                 "prompt": MEMORY_AGENT_SYSTEM_PROMPT,
@@ -181,7 +188,7 @@ def generate_opencode_config(settings: Settings, model: str = "", reasoning_effo
             }
         },
         "mcp": {
-            "klona_memory_server": {
+            LOW_LEVEL_MCP_NAME: {
                 "type": "remote",
                 "url": settings.low_level_mcp_url,
                 "enabled": True,
@@ -219,9 +226,9 @@ def opencode_config_environment(config_path: Path) -> dict[str, str]:
     return env
 
 
-def start_opencode_serve(config_path: Path, port: int = 4096) -> subprocess.Popen:
+def start_opencode_serve(config_path: Path, port: int = DEFAULT_OPENCODE_PORT) -> subprocess.Popen:
     env = opencode_config_environment(config_path)
-    return subprocess.Popen(["opencode", "serve", "--hostname", os.environ.get("OPENCODE_HOST", "127.0.0.1"), "--port", str(port)], env=env)
+    return subprocess.Popen(["opencode", "serve", "--hostname", os.environ.get("OPENCODE_HOST", DEFAULT_OPENCODE_HOST), "--port", str(port)], env=env)
 
 
 def start_process(args: Sequence[str]) -> subprocess.Popen:
@@ -250,7 +257,7 @@ def main() -> None:
     os.environ["MEMORY_AGENT_MODEL"] = model
     os.environ["MEMORY_AGENT_REASONING_EFFORT"] = reasoning
     config_path = generate_opencode_config(settings, model, reasoning)
-    opencode_proc = start_opencode_serve(config_path, int(os.environ.get("OPENCODE_PORT", "4096")))
+    opencode_proc = start_opencode_serve(config_path, int(os.environ.get("OPENCODE_PORT", str(DEFAULT_OPENCODE_PORT))))
     server_proc = start_process([sys.executable, "-m", "uvicorn", "memory_agent.server:app", "--host", "0.0.0.0", "--port", "8080"])
     worker_proc = start_process([sys.executable, "-m", "memory_agent.worker"])
     raise SystemExit(supervise([opencode_proc, server_proc, worker_proc]))

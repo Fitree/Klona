@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 import httpx
 
+from .constants import MEMORY_AGENT_NAME, MEMORY_AGENT_SESSION_TITLE
+
 
 @dataclass(frozen=True)
 class OpenCodeSession:
@@ -16,7 +18,7 @@ class OpenCodeSession:
 class OpenCodeClient:
     """Thin async client for the documented OpenCode session HTTP endpoints."""
 
-    def __init__(self, base_url: str, *, timeout: float = 600.0, agent: str = "klona-memory"):
+    def __init__(self, base_url: str, *, timeout: float = 600.0, agent: str = MEMORY_AGENT_NAME):
         self.base_url = base_url.rstrip("/")
         self.agent = agent
         self.timeout = timeout
@@ -40,18 +42,18 @@ class OpenCodeClient:
         return sessions
 
     async def create_session(self) -> OpenCodeSession:
-        response = await self._client.post("/session", json={"title": "KLONA memory agent"})
+        response = await self._client.post("/session", json={"title": MEMORY_AGENT_SESSION_TITLE})
         response.raise_for_status()
         data = response.json()
         session_id = data.get("id") or data.get("sessionID") or data.get("session_id")
         if not session_id:
             raise RuntimeError(f"OpenCode create session response missing id: {data!r}")
-        return OpenCodeSession(id=str(session_id), title=str(data.get("title") or "KLONA memory agent"))
+        return OpenCodeSession(id=str(session_id), title=str(data.get("title") or MEMORY_AGENT_SESSION_TITLE))
 
     async def get_or_create_session(self) -> OpenCodeSession:
         sessions = await self.list_sessions()
         for session in sessions:
-            if session.title == "KLONA memory agent":
+            if session.title == MEMORY_AGENT_SESSION_TITLE:
                 return session
         return await self.create_session()
 

@@ -148,8 +148,61 @@ class MemoryQueueTests(unittest.TestCase):
 
 
 class OpenCodeConfigTests(unittest.TestCase):
+    def test_shared_constants_keep_public_opencode_names_stable(self):
+        from memory_agent.constants import (
+            DEFAULT_QUEUE_DB_PATH,
+            LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN,
+            LOW_LEVEL_MCP_NAME,
+            MEMORY_AGENT_NAME,
+            MEMORY_AGENT_SESSION_TITLE,
+        )
+
+        self.assertEqual(MEMORY_AGENT_NAME, "klona-memory")
+        self.assertEqual(MEMORY_AGENT_SESSION_TITLE, "KLONA memory agent")
+        self.assertEqual(LOW_LEVEL_MCP_NAME, "klona_memory_server")
+        self.assertEqual(LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN, "klona_memory_server_*")
+        self.assertEqual(DEFAULT_QUEUE_DB_PATH, "/state/queue.db")
+
+    def test_settings_defaults_align_with_compose_queue_db_path(self):
+        from memory_agent.config import Settings
+        from memory_agent.constants import DEFAULT_QUEUE_DB_PATH
+
+        with mock.patch.dict(os.environ, {"MEMORY_AGENT_QUEUE_DB": ""}, clear=True):
+            settings = Settings()
+
+        self.assertEqual(settings.queue_db_path, Path(DEFAULT_QUEUE_DB_PATH))
+
+    def test_opencode_base_url_defaults_derive_from_host_and_port(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(os.environ, {"OPENCODE_HOST": "0.0.0.0", "OPENCODE_PORT": "5099"}, clear=True):
+            settings = Settings()
+
+        self.assertEqual(settings.opencode_base_url, "http://0.0.0.0:5099")
+
+    def test_explicit_empty_opencode_base_url_uses_host_port_defaults(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(os.environ, {"OPENCODE_BASE_URL": "", "OPENCODE_HOST": "", "OPENCODE_PORT": ""}, clear=True):
+            settings = Settings()
+
+        self.assertEqual(settings.opencode_base_url, "http://127.0.0.1:4096")
+
+    def test_explicit_opencode_base_url_still_takes_precedence(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(
+            os.environ,
+            {"OPENCODE_BASE_URL": "http://opencode.example:7000/", "OPENCODE_HOST": "0.0.0.0", "OPENCODE_PORT": "5099"},
+            clear=True,
+        ):
+            settings = Settings()
+
+        self.assertEqual(settings.opencode_base_url, "http://opencode.example:7000")
+
     def test_generated_config_limits_permissions_to_low_level_memory_tools(self):
         from memory_agent.config import Settings
+        from memory_agent.constants import LOW_LEVEL_MCP_NAME, MEMORY_AGENT_NAME
         from memory_agent.runtime import ALLOWED_TOOL_PATTERN, generate_opencode_config
 
         with tempfile.TemporaryDirectory() as tempdir:
@@ -163,18 +216,18 @@ class OpenCodeConfigTests(unittest.TestCase):
             written = generate_opencode_config(settings, model="openai/gpt-5.1", reasoning_effort="high")
             data = json.loads(written.read_text())
 
-        self.assertEqual(data["mcp"]["klona_memory_server"]["type"], "remote")
-        self.assertEqual(data["mcp"]["klona_memory_server"]["url"], "https://low-level.example/mcp")
+        self.assertEqual(data["mcp"][LOW_LEVEL_MCP_NAME]["type"], "remote")
+        self.assertEqual(data["mcp"][LOW_LEVEL_MCP_NAME]["url"], "https://low-level.example/mcp")
         self.assertEqual(
-            data["mcp"]["klona_memory_server"]["headers"],
+            data["mcp"][LOW_LEVEL_MCP_NAME]["headers"],
             {"Authorization": "Bearer low-secret"},
         )
         self.assertEqual(data["permission"], {"*": "deny", ALLOWED_TOOL_PATTERN: "allow"})
         self.assertNotIn("variant", data)
         self.assertNotIn("reasoningEffort", data)
-        self.assertEqual(data["agent"]["klona-memory"]["variant"], "high")
-        self.assertEqual(data["agent"]["klona-memory"]["mode"], "primary")
-        prompt = data["agent"]["klona-memory"]["prompt"]
+        self.assertEqual(data["agent"][MEMORY_AGENT_NAME]["variant"], "high")
+        self.assertEqual(data["agent"][MEMORY_AGENT_NAME]["mode"], "primary")
+        prompt = data["agent"][MEMORY_AGENT_NAME]["prompt"]
         self.assertIn("You are `klona-memory`", prompt)
         self.assertIn("Use only low-level Klona memory MCP tools", prompt)
         self.assertIn("klona_memory_server_vault_tree", prompt)
@@ -182,10 +235,10 @@ class OpenCodeConfigTests(unittest.TestCase):
         self.assertIn("content verbatim without semantic summarization", prompt)
         self.assertIn("Storage gating", prompt)
         self.assertEqual(
-            data["agent"]["klona-memory"]["permission"],
+            data["agent"][MEMORY_AGENT_NAME]["permission"],
             {"*": "deny", ALLOWED_TOOL_PATTERN: "allow"},
         )
-        serialized_permissions = json.dumps(data["agent"]["klona-memory"]["permission"])
+        serialized_permissions = json.dumps(data["agent"][MEMORY_AGENT_NAME]["permission"])
         for dangerous in ["bash", "shell", "edit", "filesystem"]:
             self.assertNotIn(dangerous, serialized_permissions.lower())
 

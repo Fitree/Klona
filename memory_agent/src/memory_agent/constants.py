@@ -1,0 +1,20 @@
+"""Shared constants for the server-side memory-agent service."""
+
+from __future__ import annotations
+
+MEMORY_AGENT_NAME = "klona-memory"
+MEMORY_AGENT_SESSION_TITLE = "KLONA memory agent"
+MCP_SERVER_NAME = "klona-memory-agent"
+MCP_HEALTH_SERVER_NAME = MCP_SERVER_NAME
+
+LOW_LEVEL_MCP_NAME = "klona_memory_server"
+LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN = f"{LOW_LEVEL_MCP_NAME}_*"
+
+DEFAULT_QUEUE_DB_PATH = "/state/queue.db"
+DEFAULT_RECALL_TIMEOUT_SECONDS = 600
+DEFAULT_MAX_RETRIES = 2
+DEFAULT_POLL_INTERVAL_SECONDS = 0.5
+DEFAULT_WORKER_IDLE_SLEEP_SECONDS = 1.0
+DEFAULT_OPENCODE_HOST = "127.0.0.1"
+DEFAULT_OPENCODE_PORT = 4096
+DEFAULT_OPENCODE_CONFIG_PATH = "/tmp/klona-opencode-config/opencode/opencode.json"
