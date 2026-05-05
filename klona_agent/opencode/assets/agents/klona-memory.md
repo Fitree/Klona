@@ -66,13 +66,13 @@ permission:
 - `MEMORY.md` is the memory-system index and high-level entry map for the vault.
 - Use it for orientation and navigation.
 
-### `MENTAL_MODEL.md` role
+### `KLONA_MEMORY_MENTAL_MODEL.md` role
 
-- `MENTAL_MODEL.md` is the session-start mental model summary for the primary agent.
-- This file may be prepended into the primary agent's first user message at session start, wrapped as `<Mental_model>...</Mental_model>`. If the file does not exist, this initial prepending should be skipped.
+- `KLONA_MEMORY_MENTAL_MODEL.md` is the session-start Klona memory mental model summary for the primary agent.
+- This file may be prepended into the primary agent's first user message at session start, wrapped as `<Klona_memory_mental_model>...</Klona_memory_mental_model>`. If the file does not exist, this initial prepending should be skipped.
 - `klona-memory` is responsible for keeping this file aligned with the kind of foundational understanding that should be passed directly to the primary agent.
 - Write it as plain, directly usable summary content for the primary agent, not as a vault index.
-- Avoid wikilinks, directory-oriented navigation structure, or other vault-specific formatting in `MENTAL_MODEL.md`.
+- Avoid wikilinks, directory-oriented navigation structure, or other vault-specific formatting in `KLONA_MEMORY_MENTAL_MODEL.md`.
 - Prefer concise natural language and structured bullet points that the primary agent can use immediately without extra interpretation.
 
 ## Recall

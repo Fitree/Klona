@@ -22,7 +22,9 @@ BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 SNIPPET_FILE = ASSETS_DIR / "AGENT.md.snippet"
 AGENT_SOURCE = ASSETS_DIR / "agents" / "klona-memory.md"
-PLUGIN_SOURCE = ASSETS_DIR / "plugins" / "klona-mental-model-injector.js"
+PLUGIN_SOURCE = ASSETS_DIR / "plugins" / "klona-memory-mental-model-injector.js"
+PLUGIN_FILENAME = "klona-memory-mental-model-injector.js"
+LEGACY_PLUGIN_FILENAME = "klona-mental-model-injector.js"
 
 
 def opencode_dir() -> Path:
@@ -236,7 +238,8 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
     config_path = target / "opencode.json"
     agent_md = target / "AGENTS.md"
     agent_copy = target / "agents" / "klona-memory.md"
-    plugin_copy = target / "plugins" / "klona-mental-model-injector.js"
+    plugin_copy = target / "plugins" / PLUGIN_FILENAME
+    legacy_plugin_copy = target / "plugins" / LEGACY_PLUGIN_FILENAME
     _check_required_assets()
     config = _read_json_object(config_path)
     url = (
@@ -254,6 +257,7 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         agent_md: _snapshot_file(agent_md),
         agent_copy: _snapshot_file(agent_copy),
         plugin_copy: _snapshot_file(plugin_copy),
+        legacy_plugin_copy: _snapshot_file(legacy_plugin_copy),
         config_path: _snapshot_file(config_path),
     }
     mutation_started = False
@@ -262,6 +266,8 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         mutation_started = True
         _install_marker_block(agent_md)
         _copy_required_asset(AGENT_SOURCE, agent_copy)
+        if legacy_plugin_copy.exists():
+            legacy_plugin_copy.unlink()
         _copy_required_asset(PLUGIN_SOURCE, plugin_copy)
         _install_mcp_config(config_path, url, token, config)
     except BaseException:
@@ -278,7 +284,8 @@ def uninstall() -> None:
     _remove_marker_block(target / "AGENTS.md")
     for path in [
         target / "agents" / "klona-memory.md",
-        target / "plugins" / "klona-mental-model-injector.js",
+        target / "plugins" / PLUGIN_FILENAME,
+        target / "plugins" / LEGACY_PLUGIN_FILENAME,
     ]:
         if path.exists():
             path.unlink()

@@ -4,19 +4,19 @@ from klona_agent.opencode import install as installer
 
 
 class OpenCodePluginTests(unittest.TestCase):
-    def test_plugin_is_named_mental_model_injector(self):
-        self.assertEqual(installer.PLUGIN_SOURCE.name, "klona-mental-model-injector.js")
+    def test_plugin_is_named_klona_memory_mental_model_injector(self):
+        self.assertEqual(installer.PLUGIN_SOURCE.name, "klona-memory-mental-model-injector.js")
 
         plugin = installer.PLUGIN_SOURCE.read_text()
 
-        self.assertIn("export const KlonaMentalModelInjectorPlugin", plugin)
-        self.assertIn('"klona-mental-model-injector"', plugin)
-        self.assertIn('name: "klona-mental-model-injector-plugin"', plugin)
-        self.assertIn('plugin: "klona-mental-model-injector"', plugin)
+        self.assertIn("export const KlonaMemoryMentalModelInjectorPlugin", plugin)
+        self.assertIn('"klona-memory-mental-model-injector"', plugin)
+        self.assertIn('name: "klona-memory-mental-model-injector-plugin"', plugin)
+        self.assertIn('plugin: "klona-memory-mental-model-injector"', plugin)
         self.assertNotIn("KlonaMemorySessionPlugin", plugin)
         self.assertNotIn('service: "klona-memory-session"', plugin)
 
-    def test_mental_model_injection_is_root_session_aware_and_fail_closed(self):
+    def test_klona_memory_mental_model_injection_is_root_session_aware_and_fail_closed(self):
         plugin = installer.PLUGIN_SOURCE.read_text()
 
         self.assertIn("async function isRootSession(sessionID)", plugin)
@@ -28,8 +28,8 @@ class OpenCodePluginTests(unittest.TestCase):
         self.assertIn("if (!(await isRootSession(sessionID))) return", plugin)
         self.assertIn("session lookup returned an error", plugin)
         self.assertIn("session lookup returned an unexpected shape", plugin)
-        self.assertIn("Skipping MENTAL_MODEL.md injection because session lookup failed", plugin)
-        self.assertNotIn("MENTAL_MODEL_INJECTION_AGENT", plugin)
+        self.assertIn("Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session lookup failed", plugin)
+        self.assertNotIn("KLONA_MEMORY_MENTAL_MODEL_INJECTION_AGENT", plugin)
         self.assertNotIn("agent.trim() ===", plugin)
 
     def test_plugin_observes_compaction_and_marks_next_root_message_for_injection(self):
@@ -66,8 +66,8 @@ class OpenCodePluginTests(unittest.TestCase):
         self.assertNotIn("claimInjectedSessionMarker", plugin)
         self.assertNotIn("ensureInjectedSessionMarker", plugin)
         self.assertNotIn("removeInjectedSessionMarker", plugin)
-        self.assertNotIn("MENTAL_MODEL_MARKER", plugin)
-        self.assertNotIn("MENTAL_MODEL_FILE_PATH", plugin)
+        self.assertNotIn("KLONA_MEMORY_MENTAL_MODEL_MARKER", plugin)
+        self.assertNotIn("KLONA_MEMORY_MENTAL_MODEL_FILE_PATH", plugin)
 
     def test_plugin_does_not_check_legacy_session_markers_after_rename(self):
         plugin = installer.PLUGIN_SOURCE.read_text()

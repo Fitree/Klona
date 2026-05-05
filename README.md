@@ -69,13 +69,13 @@ python install_agent.py --uninstall --platform opencode
 
 Klona has a few small pieces that work together:
 
-1. **Markdown vault**: Your memory is stored as ordinary markdown files. The directory tree is the index, files can link to each other with `[[wikilinks]]`, and `MENTAL_MODEL.md` is a special summary file intended for fast session-start context.
+1. **Markdown vault**: Your memory is stored as ordinary markdown files. The directory tree is the index, files can link to each other with `[[wikilinks]]`, and `KLONA_MEMORY_MENTAL_MODEL.md` is a special summary file intended for fast session-start context.
 2. **MCP memory server**: `memory_server/` exposes the vault through MCP tools for tree/list/read/write/update/delete/move/search/backlinks operations.
 3. **`klona-memory` subagent**: The OpenCode integration installs a dedicated memory specialist agent that handles recall and storage requests through the MCP server.
 4. **OpenCode integration**: The installer adds Klona-managed OpenCode files and MCP configuration under `~/.config/opencode`.
-5. **`MENTAL_MODEL.md` injection**: The OpenCode plugin reads `/MENTAL_MODEL.md` from the vault and prepends it to the first user message of a root OpenCode session. It also marks sessions for reinjection after compaction.
+5. **`KLONA_MEMORY_MENTAL_MODEL.md` injection**: The OpenCode plugin reads `/KLONA_MEMORY_MENTAL_MODEL.md` from the vault and prepends it to the first user message of a root OpenCode session. It also marks sessions for reinjection after compaction.
 
-The result is a memory loop where the agent can retrieve durable knowledge from the vault, update the vault when something is worth remembering, and start later sessions with a compact mental model already in context.
+The result is a memory loop where the agent can retrieve durable knowledge from the vault, update the vault when something is worth remembering, and start later sessions with a compact Klona memory mental model already in context.
 
 ## Progress and roadmap
 

@@ -8,7 +8,7 @@ import urllib.request
 
 MCP_URL = os.environ["KLONA_E2E_MCP_URL"]
 TOKEN = os.environ["KLONA_E2E_TOKEN"]
-MENTAL_MODEL_MARKER = "KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"
+KLONA_MEMORY_MENTAL_MODEL_MARKER = "KLONA_E2E_KLONA_MEMORY_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"
 
 
 def phase(name):
@@ -178,16 +178,16 @@ def run_tool_checks(client):
 
     root_listing = client.call_tool("vault_ls", {"path": "/"})
     require_equal(root_listing["path"], "/", "root listing path mismatch")
-    require("MENTAL_MODEL.md" in [item["name"] for item in root_listing["files"]], "MENTAL_MODEL.md missing from root listing")
+    require("KLONA_MEMORY_MENTAL_MODEL.md" in [item["name"] for item in root_listing["files"]], "KLONA_MEMORY_MENTAL_MODEL.md missing from root listing")
 
-    mental_model = client.call_tool("vault_read", {"path": "/MENTAL_MODEL.md"})
-    require_equal(mental_model["path"], "/MENTAL_MODEL.md", "mental model read path mismatch")
-    require(MENTAL_MODEL_MARKER in mental_model["content"], "mental model marker missing from copied runtime vault")
-    require_equal(mental_model["links"], [], "mental model links mismatch")
+    klona_memory_mental_model = client.call_tool("vault_read", {"path": "/KLONA_MEMORY_MENTAL_MODEL.md"})
+    require_equal(klona_memory_mental_model["path"], "/KLONA_MEMORY_MENTAL_MODEL.md", "Klona memory mental model read path mismatch")
+    require(KLONA_MEMORY_MENTAL_MODEL_MARKER in klona_memory_mental_model["content"], "Klona memory mental model marker missing from copied runtime vault")
+    require_equal(klona_memory_mental_model["links"], [], "Klona memory mental model links mismatch")
 
     marker_search = client.call_tool("vault_grep", {"pattern": "unique MARKER", "path": "/"})
-    require_equal(marker_search["total_matches"], 1, "case-insensitive grep should find mental model")
-    require_equal(marker_search["results"][0]["path"], "/MENTAL_MODEL.md", "grep result path mismatch")
+    require_equal(marker_search["total_matches"], 1, "case-insensitive grep should find Klona memory mental model")
+    require_equal(marker_search["results"][0]["path"], "/KLONA_MEMORY_MENTAL_MODEL.md", "grep result path mismatch")
 
     phase("Mutate runtime vault through MCP tools")
     mkdir_result = client.call_tool("vault_mkdir", {"path": "/scenario2/nested/"})
@@ -271,11 +271,11 @@ def run_tool_checks(client):
 
     runtime_update = client.call_tool(
         "vault_update",
-        {"path": "/MENTAL_MODEL.md", "content": "# Runtime-only mutation\nScenario 2 changed the copied vault only.\n"},
+        {"path": "/KLONA_MEMORY_MENTAL_MODEL.md", "content": "# Runtime-only mutation\nScenario 2 changed the copied vault only.\n"},
     )
-    require_equal(runtime_update["status"], "ok", "runtime mental model update status mismatch")
-    runtime_read = client.call_tool("vault_read", {"path": "/MENTAL_MODEL.md"})
-    require("Runtime-only mutation" in runtime_read["content"], "runtime mental model update was not applied")
+    require_equal(runtime_update["status"], "ok", "runtime Klona memory mental model update status mismatch")
+    runtime_read = client.call_tool("vault_read", {"path": "/KLONA_MEMORY_MENTAL_MODEL.md"})
+    require("Runtime-only mutation" in runtime_read["content"], "runtime Klona memory mental model update was not applied")
 
 
 def main():

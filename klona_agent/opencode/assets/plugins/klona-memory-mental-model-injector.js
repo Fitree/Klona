@@ -4,19 +4,19 @@ import path from "node:path"
 
 const MCP_PROTOCOL_VERSION = "2025-03-26"
 const MCP_ACCEPT_HEADER = "application/json, text/event-stream"
-const INITIAL_CONTEXT_OPEN = "<Mental_model>\n"
-const INITIAL_CONTEXT_CLOSE = "\n</Mental_model>"
+const INITIAL_CONTEXT_OPEN = "<Klona_memory_mental_model>\n"
+const INITIAL_CONTEXT_CLOSE = "\n</Klona_memory_mental_model>"
 const DEFAULT_MCP_NAME = "klona_memory_server"
-const MENTAL_MODEL_VAULT_PATH = "/MENTAL_MODEL.md"
+const KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH = "/KLONA_MEMORY_MENTAL_MODEL.md"
 const PLUGIN_STATE_DIR = path.join(
   os.homedir(),
   ".local",
   "share",
   "opencode",
   "plugin-state",
-  "klona-mental-model-injector",
+  "klona-memory-mental-model-injector",
 )
-export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
+export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
   let resolvedConfig
   const loggedSessions = new Set()
 
@@ -24,7 +24,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
     try {
       await client.app.log({
         body: {
-          service: "klona-mental-model-injector",
+          service: "klona-memory-mental-model-injector",
           level,
           message,
           extra,
@@ -52,7 +52,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
       const response = await client.session.get({ path: { id: sessionID } })
 
       if (response?.error) {
-        await log("warn", "Skipping MENTAL_MODEL.md injection because session lookup returned an error", {
+        await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session lookup returned an error", {
           sessionID,
           error: response.error?.message ?? String(response.error),
         })
@@ -61,7 +61,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
 
       const session = response?.data ?? response
       if (!session || session.id !== sessionID) {
-        await log("warn", "Skipping MENTAL_MODEL.md injection because session lookup returned an unexpected shape", {
+        await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session lookup returned an unexpected shape", {
           sessionID,
         })
         return false
@@ -69,7 +69,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
 
       return !session.parentID
     } catch (error) {
-      await log("warn", "Skipping MENTAL_MODEL.md injection because session lookup failed", {
+      await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session lookup failed", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       })
@@ -149,7 +149,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: {},
           clientInfo: {
-            name: "klona-mental-model-injector-plugin",
+            name: "klona-memory-mental-model-injector-plugin",
             version: "1.0.0",
           },
         },
@@ -214,13 +214,13 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
     return texts.join("\n").toLowerCase()
   }
 
-  function isMissingMentalModelResult(result) {
+  function isMissingKlonaMemoryMentalModelResult(result) {
     if (!result?.isError) return false
     const text = resultText(result)
     return text.includes("not found") || text.includes("does not exist") || text.includes("no such file")
   }
 
-  async function readMentalModel() {
+  async function readKlonaMemoryMentalModel() {
     const config = getMemoryMcpConfig()
     if (!config) return ""
 
@@ -237,17 +237,17 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
         params: {
           name: "vault_read",
           arguments: {
-            path: MENTAL_MODEL_VAULT_PATH,
+            path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
           },
         },
       },
     })
 
     if (call.payload?.error) {
-      throw new Error(call.payload.error.message || `MCP tool call failed for ${MENTAL_MODEL_VAULT_PATH}`)
+      throw new Error(call.payload.error.message || `MCP tool call failed for ${KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH}`)
     }
 
-    if (isMissingMentalModelResult(call.payload?.result)) {
+    if (isMissingKlonaMemoryMentalModelResult(call.payload?.result)) {
       return ""
     }
 
@@ -289,7 +289,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
     try {
       await writeInjectionStatus(sessionID, { should_inject: true, reason: "post-compaction" })
     } catch (error) {
-      await log("warn", "Failed to mark session for post-compaction MENTAL_MODEL.md injection", {
+      await log("warn", "Failed to mark session for post-compaction KLONA_MEMORY_MENTAL_MODEL.md injection", {
         sessionID,
         error: error instanceof Error ? error.message : String(error),
       })
@@ -316,12 +316,12 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
     return candidates.find((value) => typeof value === "string" && value.length > 0)
   }
 
-  function wrapMentalModelContent(memoryContent) {
+  function wrapKlonaMemoryMentalModelContent(memoryContent) {
     return `${INITIAL_CONTEXT_OPEN}${memoryContent}${INITIAL_CONTEXT_CLOSE}`
   }
 
-  function prependMentalModelToFirstTextPart(output, memoryContent) {
-    const prefix = wrapMentalModelContent(memoryContent)
+  function prependKlonaMemoryMentalModelToFirstTextPart(output, memoryContent) {
+    const prefix = wrapKlonaMemoryMentalModelContent(memoryContent)
     const firstTextPart = output.parts.find(
       (part) => part?.type === "text" && typeof part.text === "string",
     )
@@ -333,7 +333,7 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
       firstTextPart.synthetic = false
       firstTextPart.metadata = {
         ...(firstTextPart.metadata ?? {}),
-        plugin: "klona-mental-model-injector",
+        plugin: "klona-memory-mental-model-injector",
         prepended: true,
       }
       return true
@@ -366,31 +366,31 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
         const status = await ensureInjectionStatus(sessionID)
         if (status.should_inject === false) return
 
-        const memoryContent = await readMentalModel()
+        const memoryContent = await readKlonaMemoryMentalModel()
 
         if (!memoryContent) {
           if (!loggedSessions.has(sessionID)) {
             loggedSessions.add(sessionID)
-            await log("debug", "Skipping MENTAL_MODEL.md injection because the file is missing or empty", {
+            await log("debug", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because the file is missing or empty", {
               sessionID,
               agent,
-              path: MENTAL_MODEL_VAULT_PATH,
+              path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
             })
           }
           return
         }
 
-        injected = prependMentalModelToFirstTextPart(output, memoryContent)
+        injected = prependKlonaMemoryMentalModelToFirstTextPart(output, memoryContent)
         if (!injected) return
 
         await writeInjectionStatus(sessionID, { should_inject: false })
 
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
-          await log("info", "Prepended MENTAL_MODEL.md into the first user message", {
+          await log("info", "Prepended KLONA_MEMORY_MENTAL_MODEL.md into the first user message", {
             sessionID,
             agent,
-            path: MENTAL_MODEL_VAULT_PATH,
+            path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
             chars: memoryContent.length,
             statusPath: injectionStatusFilePath(sessionID),
           })
@@ -398,10 +398,10 @@ export const KlonaMentalModelInjectorPlugin = async ({ client }) => {
       } catch (error) {
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
-          await log("warn", "Failed to inject MENTAL_MODEL.md into session user context", {
+          await log("warn", "Failed to inject KLONA_MEMORY_MENTAL_MODEL.md into session user context", {
             sessionID,
             agent,
-            path: MENTAL_MODEL_VAULT_PATH,
+            path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
             error: error instanceof Error ? error.message : String(error),
           })
         }

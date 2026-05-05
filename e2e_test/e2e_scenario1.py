@@ -21,7 +21,7 @@ TMP_DIR = Path("/tmp/klona-e2e-scenario1")
 CAPTURE_FILE = TMP_DIR / "fake-provider-capture.jsonl"
 FAKE_PROVIDER_PORT = 4545
 OPENCODE_SERVE_PORT = 4546
-MENTAL_MODEL_FILE = Path(__file__).resolve().parent / "test_vault" / "MENTAL_MODEL.md"
+KLONA_MEMORY_MENTAL_MODEL_FILE = Path(__file__).resolve().parent / "test_vault" / "KLONA_MEMORY_MENTAL_MODEL.md"
 
 
 def phase(name):
@@ -278,12 +278,12 @@ def _captured_user_message_contents():
         raise SystemExit("fake provider chat completion capture did not include a user message")
 
 
-def check_mental_model_injection_at_user_message(message_text: str):
+def check_klona_memory_mental_model_injection_at_user_message(message_text: str):
     if not CAPTURE_FILE.is_file():
         raise SystemExit(f"fake provider did not capture any requests at {CAPTURE_FILE}")
 
-    expected_mental_model = MENTAL_MODEL_FILE.read_text(encoding="utf-8")
-    expected_block = f"<Mental_model>\n{expected_mental_model}</Mental_model>"
+    expected_klona_memory_mental_model = KLONA_MEMORY_MENTAL_MODEL_FILE.read_text(encoding="utf-8")
+    expected_block = f"<Klona_memory_mental_model>\n{expected_klona_memory_mental_model}</Klona_memory_mental_model>"
     matching_messages = []
     for content in _captured_user_message_contents():
         if message_text not in content:
@@ -295,7 +295,7 @@ def check_mental_model_injection_at_user_message(message_text: str):
     if matching_messages:
         raise SystemExit(
             f"fake provider captured {len(matching_messages)} user message(s) containing {message_text!r}, but none "
-            "did not include the exact mental model block"
+            "did not include the exact Klona memory mental model block"
         )
 
     raise SystemExit(
@@ -355,10 +355,10 @@ def summarize_opencode_session(session_id: str):
             raise SystemExit(f"opencode summarize failed with HTTP {response.status}")
 
 
-def check_mental_model_injector_state_dir():
-    state_dir = OPENCODE_DATA_DIR / "plugin-state" / "klona-mental-model-injector"
+def check_klona_memory_mental_model_injector_state_dir():
+    state_dir = OPENCODE_DATA_DIR / "plugin-state" / "klona-memory-mental-model-injector"
     if not state_dir.is_dir():
-        raise SystemExit(f"mental model injector state dir is missing: {state_dir}")
+        raise SystemExit(f"Klona memory mental model injector state dir is missing: {state_dir}")
 
 
 def verify_uninstall():
@@ -371,7 +371,7 @@ def verify_uninstall():
 
     for path in [
         OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
-        OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js",
+        OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js",
     ]:
         if path.exists():
             raise SystemExit(f"KLONA artifact remains after uninstall: {path}")
@@ -406,14 +406,14 @@ def main():
         require_file(OPENCODE_CONFIG_DIR / "AGENTS.md")
         require_file(OPENCODE_CONFIG)
         require_file(OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md")
-        require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js")
+        require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js")
         assert_file_matches(
             "klona_agent/opencode/assets/agents/klona-memory.md",
             OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
         )
         assert_file_matches(
-            "klona_agent/opencode/assets/plugins/klona-mental-model-injector.js",
-            OPENCODE_CONFIG_DIR / "plugins" / "klona-mental-model-injector.js",
+            "klona_agent/opencode/assets/plugins/klona-memory-mental-model-injector.js",
+            OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js",
         )
 
         phase("Configure fake OpenAI-compatible provider")
@@ -439,14 +439,14 @@ def main():
                 "fake/e2e-model",
                 "--title",
                 session_title,
-                "Verify initial KLONA mental model injection",
+                "Verify initial Klona memory mental model injection",
             ],
             timeout=90,
         )
 
-        phase("Verify fake provider captured injected mental model")
-        check_mental_model_injection_at_user_message("Verify initial KLONA mental model injection")
-        check_mental_model_injector_state_dir()
+        phase("Verify fake provider captured injected Klona memory mental model")
+        check_klona_memory_mental_model_injection_at_user_message("Verify initial Klona memory mental model injection")
+        check_klona_memory_mental_model_injector_state_dir()
 
         phase("Find OpenCode session created by first message")
         session_id = opencode_session_id_for_title(session_title)
@@ -479,13 +479,13 @@ def main():
                 "fake/e2e-model",
                 "--session",
                 session_id,
-                "Verify KLONA mental model injection after compaction",
+                "Verify Klona memory mental model injection after compaction",
             ],
             timeout=90,
         )
 
-        phase("Verify fake provider captured post-compaction injected mental model")
-        check_mental_model_injection_at_user_message("Verify KLONA mental model injection after compaction")
+        phase("Verify fake provider captured post-compaction injected Klona memory mental model")
+        check_klona_memory_mental_model_injection_at_user_message("Verify Klona memory mental model injection after compaction")
 
         phase("Uninstall KLONA OpenCode integration")
         run(["python3", "install_agent.py", "--uninstall", "--platform", "opencode"])

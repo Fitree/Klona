@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENARIO = ROOT / "e2e_test" / "e2e_scenario1.py"
-MENTAL_MODEL = ROOT / "e2e_test" / "test_vault" / "MENTAL_MODEL.md"
+KLONA_MEMORY_MENTAL_MODEL = ROOT / "e2e_test" / "test_vault" / "KLONA_MEMORY_MENTAL_MODEL.md"
 
 
 def load_scenario_module():
@@ -17,10 +17,10 @@ def load_scenario_module():
     return module
 
 
-class MentalModelCaptureVerificationTests(unittest.TestCase):
+class KlonaMemoryMentalModelCaptureVerificationTests(unittest.TestCase):
     def setUp(self):
         self.scenario = load_scenario_module()
-        self.mental_model = MENTAL_MODEL.read_text(encoding="utf-8")
+        self.klona_memory_mental_model = KLONA_MEMORY_MENTAL_MODEL.read_text(encoding="utf-8")
 
     def write_capture(self, temp_path, records):
         capture_file = temp_path / "capture.jsonl"
@@ -36,22 +36,22 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
             body.update(extra)
         return {"path": "/v1/chat/completions", "body": json.dumps(body)}
 
-    def test_valid_user_message_contains_only_exact_mental_model_block(self):
+    def test_valid_user_message_contains_only_exact_klona_memory_mental_model_block(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            user_content = f"<Mental_model>\n{self.mental_model}</Mental_model>\nHello from test"
+            user_content = f"<Klona_memory_mental_model>\n{self.klona_memory_mental_model}</Klona_memory_mental_model>\nHello from test"
             self.write_capture(
                 temp_path,
                 [self.chat_record([{"role": "user", "content": user_content}])],
             )
 
-            self.scenario.check_mental_model_injection_at_user_message("Hello from test")
+            self.scenario.check_klona_memory_mental_model_injection_at_user_message("Hello from test")
 
     def test_scans_until_user_message_containing_requested_text(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            wrong_content = f"<Mental_model>\n# Wrong mental model\n</Mental_model>\nOther message"
-            matching_content = f"<Mental_model>\n{self.mental_model}</Mental_model>\nRequested message"
+            wrong_content = f"<Klona_memory_mental_model>\n# Wrong Klona memory mental model\n</Klona_memory_mental_model>\nOther message"
+            matching_content = f"<Klona_memory_mental_model>\n{self.klona_memory_mental_model}</Klona_memory_mental_model>\nRequested message"
             self.write_capture(
                 temp_path,
                 [
@@ -60,13 +60,13 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
                 ],
             )
 
-            self.scenario.check_mental_model_injection_at_user_message("Requested message")
+            self.scenario.check_klona_memory_mental_model_injection_at_user_message("Requested message")
 
-    def test_scans_all_requested_messages_until_one_has_mental_model(self):
+    def test_scans_all_requested_messages_until_one_has_klona_memory_mental_model(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             first_match_without_model = "Requested duplicate message"
-            second_match_with_model = f"<Mental_model>\n{self.mental_model}</Mental_model>\nRequested duplicate message"
+            second_match_with_model = f"<Klona_memory_mental_model>\n{self.klona_memory_mental_model}</Klona_memory_mental_model>\nRequested duplicate message"
             self.write_capture(
                 temp_path,
                 [
@@ -75,38 +75,38 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
                 ],
             )
 
-            self.scenario.check_mental_model_injection_at_user_message("Requested duplicate message")
+            self.scenario.check_klona_memory_mental_model_injection_at_user_message("Requested duplicate message")
 
-    def test_marker_outside_user_message_does_not_satisfy_injection_check(self):
+    def test_marker_outside_user_message_does_not_satisfy_klona_memory_mental_model_injection_check(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            user_content = "User message without mental model"
+            user_content = "User message without Klona memory mental model"
             self.write_capture(
                 temp_path,
                 [
                     self.chat_record(
                         [
-                            {"role": "system", "content": f"<Mental_model>\n{self.mental_model}\n</Mental_model>"},
+                            {"role": "system", "content": f"<Klona_memory_mental_model>\n{self.klona_memory_mental_model}\n</Klona_memory_mental_model>"},
                             {"role": "user", "content": user_content},
                         ],
-                        extra={"metadata": "KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"},
+                        extra={"metadata": "KLONA_E2E_KLONA_MEMORY_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"},
                     )
                 ],
             )
 
             with self.assertRaises(SystemExit):
-                self.scenario.check_mental_model_injection_at_user_message("User message without mental model")
+                self.scenario.check_klona_memory_mental_model_injection_at_user_message("User message without Klona memory mental model")
 
-    def test_mental_model_block_must_match_file_content_exactly(self):
+    def test_klona_memory_mental_model_block_must_match_file_content_exactly(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            user_content = "<Mental_model>\n# Wrong mental model\n</Mental_model>"
+            user_content = "<Klona_memory_mental_model>\n# Wrong Klona memory mental model\n</Klona_memory_mental_model>"
             self.write_capture(
                 temp_path,
                 [
                     self.chat_record(
                         [
-                            {"role": "system", "content": self.mental_model},
+                            {"role": "system", "content": self.klona_memory_mental_model},
                             {"role": "user", "content": user_content},
                         ]
                     )
@@ -114,13 +114,13 @@ class MentalModelCaptureVerificationTests(unittest.TestCase):
             )
 
             with self.assertRaises(SystemExit):
-                self.scenario.check_mental_model_injection_at_user_message("Wrong mental model")
+                self.scenario.check_klona_memory_mental_model_injection_at_user_message("Wrong Klona memory mental model")
 
-    def test_scenario_uses_exact_mental_model_block_comparison(self):
+    def test_scenario_uses_exact_klona_memory_mental_model_block_comparison(self):
         content = SCENARIO.read_text(encoding="utf-8")
 
-        self.assertNotIn("_mental_model_matches", content)
-        self.assertIn('expected_block = f"<Mental_model>\\n{expected_mental_model}</Mental_model>"', content)
+        self.assertNotIn("_klona_memory_mental_model_matches", content)
+        self.assertIn('expected_block = f"<Klona_memory_mental_model>\\n{expected_klona_memory_mental_model}</Klona_memory_mental_model>"', content)
         self.assertIn("if expected_block in content:", content)
 
 

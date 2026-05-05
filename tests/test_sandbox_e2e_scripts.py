@@ -22,8 +22,8 @@ OLD_INNER = ROOT / "sandbox" / "e2e_test.sh"
 LEGACY_BUILD = ROOT / "sandbox" / "build.sh"
 LEGACY_START_DOCKER = ROOT / "sandbox" / "start_docker.sh"
 README = ROOT / "README.md"
-MENTAL_MODEL = E2E_DIR / "test_vault" / "MENTAL_MODEL.md"
-RARE_MENTAL_MODEL_MARKER = "KLONA_E2E_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"
+KLONA_MEMORY_MENTAL_MODEL = E2E_DIR / "test_vault" / "KLONA_MEMORY_MENTAL_MODEL.md"
+RARE_KLONA_MEMORY_MENTAL_MODEL_MARKER = "KLONA_E2E_KLONA_MEMORY_MENTAL_MODEL_LOADED_7f4e2d1a9c6b4380b5e21f0d3a8c9e62"
 
 
 class SandboxE2EScriptTests(unittest.TestCase):
@@ -52,7 +52,7 @@ class SandboxE2EScriptTests(unittest.TestCase):
             "docker-compose.e2e.yml",
             "e2e_scenario1.py",
             "run_e2e.sh",
-            "test_vault/MENTAL_MODEL.md",
+            "test_vault/KLONA_MEMORY_MENTAL_MODEL.md",
         ]:
             path = OLD_E2E_DIR / relative_path
             self.assertFalse(path.exists(), f"{path.relative_to(ROOT)} should not exist")
@@ -142,11 +142,11 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("/home/test_user", content)
         self.assertIn("/bin/bash", content)
 
-    def test_test_vault_contains_mounted_mental_model(self):
-        content = MENTAL_MODEL.read_text()
+    def test_test_vault_contains_mounted_klona_memory_mental_model(self):
+        content = KLONA_MEMORY_MENTAL_MODEL.read_text()
 
-        self.assertIn("MENTAL_MODEL.md", str(MENTAL_MODEL))
-        self.assertIn(RARE_MENTAL_MODEL_MARKER, content)
+        self.assertIn("KLONA_MEMORY_MENTAL_MODEL.md", str(KLONA_MEMORY_MENTAL_MODEL))
+        self.assertIn(RARE_KLONA_MEMORY_MENTAL_MODEL_MARKER, content)
 
     def test_run_e2e_is_executable_and_cleans_up(self):
         mode = RUNNER.stat().st_mode
@@ -258,11 +258,11 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("AGENTS.md", content)
         self.assertIn("opencode.json", content)
         self.assertIn("agents/klona-memory.md", content)
-        self.assertIn("plugins/klona-mental-model-injector.js", content)
+        self.assertIn("plugins/klona-memory-mental-model-injector.js", content)
         self.assertNotIn("klona-memory-session.js", content)
         self.assertNotIn("XDG_DATA_HOME", content)
         self.assertIn('HOME / ".local" / "share" / "opencode"', content)
-        self.assertIn('plugin-state" / "klona-mental-model-injector"', content)
+        self.assertIn('plugin-state" / "klona-memory-mental-model-injector"', content)
         self.assertIn("unified_diff", content)
         self.assertIn("ThreadingHTTPServer", content)
         self.assertIn("BaseHTTPRequestHandler", content)
@@ -271,16 +271,16 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("/v1/chat/completions", content)
         self.assertIn("opencode", content)
         self.assertIn("fake/e2e-model", content)
-        self.assertIn('"Verify initial KLONA mental model injection"', content)
-        self.assertIn('"Verify KLONA mental model injection after compaction"', content)
+        self.assertIn('"Verify initial Klona memory mental model injection"', content)
+        self.assertIn('"Verify Klona memory mental model injection after compaction"', content)
         self.assertNotIn('"Hello from scenario 1"', content)
         self.assertNotIn('"Hello after compaction"', content)
         self.assertNotIn('prompt = "Hello from scenario 1"', content)
-        self.assertIn("MENTAL_MODEL_FILE", content)
-        self.assertIn("<Mental_model>", content)
-        self.assertIn("def check_mental_model_injection_at_user_message(message_text: str):", content)
-        self.assertIn('check_mental_model_injection_at_user_message("Verify initial KLONA mental model injection")', content)
-        self.assertIn('check_mental_model_injection_at_user_message("Verify KLONA mental model injection after compaction")', content)
+        self.assertIn("KLONA_MEMORY_MENTAL_MODEL_FILE", content)
+        self.assertIn("<Klona_memory_mental_model>", content)
+        self.assertIn("def check_klona_memory_mental_model_injection_at_user_message(message_text: str):", content)
+        self.assertIn('check_klona_memory_mental_model_injection_at_user_message("Verify initial Klona memory mental model injection")', content)
+        self.assertIn('check_klona_memory_mental_model_injection_at_user_message("Verify Klona memory mental model injection after compaction")', content)
         self.assertIn('session_title = f"klona-e2e-scenario1-', content)
         self.assertIn('"--title",', content)
         self.assertIn('session_title,', content)
@@ -341,20 +341,16 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertNotIn("clean_scenario_state", content)
         self.assertNotIn("unlink(missing_ok=True)", content)
         self.assertNotIn(
-            'shutil.rmtree(OPENCODE_DATA_DIR / "plugin-state" / "klona-mental-model-injector"',
+            'shutil.rmtree(OPENCODE_DATA_DIR / "plugin-state" / "klona-memory-mental-model-injector"',
             content,
         )
         self.assertIn("shutil.rmtree(TMP_DIR, ignore_errors=True)", content)
 
-    def test_readme_documents_one_command_e2e(self):
+    def test_readme_does_not_add_out_of_scope_e2e_docs(self):
         content = README.read_text()
 
-        self.assertIn("e2e_test/run_e2e.sh", content)
+        self.assertNotIn("e2e_test/run_e2e.sh", content)
         self.assertNotIn("sandbox/run_e2e.sh", content)
-        self.assertIn("Docker Compose v2", content)
-        self.assertIn("running Docker daemon", content)
-        self.assertIn("actual OpenCode", content)
-        self.assertIn("fake OpenAI-compatible provider", content)
 
 
 if __name__ == "__main__":
