@@ -173,13 +173,21 @@ class OpenCodeConfigTests(unittest.TestCase):
         self.assertNotIn("variant", data)
         self.assertNotIn("reasoningEffort", data)
         self.assertEqual(data["agent"]["klona-memory"]["variant"], "high")
+        self.assertEqual(data["agent"]["klona-memory"]["mode"], "primary")
+        prompt = data["agent"]["klona-memory"]["prompt"]
+        self.assertIn("You are `klona-memory`", prompt)
+        self.assertIn("Use only low-level Klona memory MCP tools", prompt)
+        self.assertIn("klona_memory_server_vault_tree", prompt)
+        self.assertIn("KLONA_MEMORY_MENTAL_MODEL.md", prompt)
+        self.assertIn("content verbatim without semantic summarization", prompt)
+        self.assertIn("Storage gating", prompt)
         self.assertEqual(
             data["agent"]["klona-memory"]["permission"],
             {"*": "deny", ALLOWED_TOOL_PATTERN: "allow"},
         )
-        serialized = json.dumps(data)
-        for dangerous in ["bash", "shell", "edit", "write", "filesystem"]:
-            self.assertNotIn(dangerous, serialized.lower())
+        serialized_permissions = json.dumps(data["agent"]["klona-memory"]["permission"])
+        for dangerous in ["bash", "shell", "edit", "filesystem"]:
+            self.assertNotIn(dangerous, serialized_permissions.lower())
 
     def test_generated_config_path_uses_xdg_loadable_shape(self):
         from memory_agent.config import Settings
@@ -380,7 +388,7 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PromptTests(unittest.TestCase):
-    def test_recall_prompt_preserves_exact_file_content_requests(self):
+    def test_recall_prompt_is_compact_and_relies_on_system_prompt(self):
         from memory_agent.config import Settings
         from memory_agent.prompts import recall_prompt
 
@@ -389,9 +397,30 @@ class PromptTests(unittest.TestCase):
             Settings(low_level_mcp_url="http://memory-server:8000/mcp"),
         )
 
-        self.assertIn("exact current file content", prompt)
-        self.assertIn("content verbatim without semantic summarization", prompt)
         self.assertIn("/KLONA_MEMORY_MENTAL_MODEL.md", prompt)
+        self.assertLess(len(prompt), 400)
+        self.assertNotIn("vault_tree", prompt)
+        self.assertNotIn("Storage gating", prompt)
+        self.assertNotIn("content verbatim without semantic summarization", prompt)
+
+    def test_remember_prompt_is_compact_and_relies_on_system_prompt(self):
+        from memory_agent.config import Settings
+        from memory_agent.prompts import remember_prompt
+
+        prompt = remember_prompt("Leo prefers concise memory recall.", Settings())
+
+        self.assertIn("Task: remember", prompt)
+        self.assertIn("Leo prefers concise memory recall.", prompt)
+        self.assertLess(len(prompt), 300)
+        self.assertNotIn("vault_tree", prompt)
+        self.assertNotIn("Storage gating", prompt)
+
+    def test_system_prompt_contains_exact_file_content_behavior(self):
+        from memory_agent.system_prompt import MEMORY_AGENT_SYSTEM_PROMPT
+
+        self.assertIn("exact current file content", MEMORY_AGENT_SYSTEM_PROMPT)
+        self.assertIn("content verbatim without semantic summarization", MEMORY_AGENT_SYSTEM_PROMPT)
+        self.assertIn("low-level MCP tools", MEMORY_AGENT_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

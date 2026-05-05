@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Sequence
 
 from .config import load_settings, Settings
+from .system_prompt import MEMORY_AGENT_SYSTEM_PROMPT
 
 
 ALLOWED_TOOL_PATTERN = "klona_memory_server_*"
@@ -171,6 +172,8 @@ def generate_opencode_config(settings: Settings, model: str = "", reasoning_effo
         "agent": {
             "klona-memory": {
                 **agent_model_config,
+                "mode": "primary",
+                "prompt": MEMORY_AGENT_SYSTEM_PROMPT,
                 "permission": {
                     "*": "deny",
                     ALLOWED_TOOL_PATTERN: "allow",
