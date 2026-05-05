@@ -6,7 +6,8 @@ const MCP_PROTOCOL_VERSION = "2025-03-26"
 const MCP_ACCEPT_HEADER = "application/json, text/event-stream"
 const INITIAL_CONTEXT_OPEN = "<Klona_memory_mental_model>\n"
 const INITIAL_CONTEXT_CLOSE = "\n</Klona_memory_mental_model>"
-const DEFAULT_MCP_NAME = "klona_memory_server"
+const DEFAULT_MCP_NAME = "klona_memory"
+const DEFAULT_MCP_TIMEOUT_MS = 600_000
 const KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH = "/KLONA_MEMORY_MENTAL_MODEL.md"
 const PLUGIN_STATE_DIR = path.join(
   os.homedir(),
@@ -43,7 +44,7 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     return {
       url: mcp.url,
       headers: mcp.headers ?? {},
-      timeout: typeof mcp.timeout === "number" ? mcp.timeout : 5000,
+      timeout: typeof mcp.timeout === "number" ? mcp.timeout : DEFAULT_MCP_TIMEOUT_MS,
     }
   }
 
@@ -176,10 +177,26 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
   }
 
   function extractMemoryContent(result) {
-    const direct = result?.structuredContent ?? result?.content
-    if (direct && typeof direct === "object" && typeof direct.content === "string") {
-      return direct.content.trim()
+    function extract(value) {
+      if (!value) return ""
+      if (typeof value === "string") return value.trim()
+
+      if (typeof value === "object") {
+        if (typeof value.result === "string") return value.result.trim()
+        if (typeof value.content === "string") return value.content.trim()
+
+        const structured = extract(value.structuredContent)
+        if (structured) return structured
+
+        const nestedResult = value.result && typeof value.result === "object" ? extract(value.result) : ""
+        if (nestedResult) return nestedResult
+      }
+
+      return ""
     }
+
+    const direct = extract(result?.structuredContent) || extract(result?.result) || extract(result?.content)
+    if (direct) return direct
 
     const items = Array.isArray(result?.content) ? result.content : []
     for (const item of items) {
@@ -189,9 +206,8 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
 
       try {
         const parsed = JSON.parse(text)
-        if (parsed && typeof parsed.content === "string") {
-          return parsed.content.trim()
-        }
+        const parsedContent = extract(parsed)
+        if (parsedContent) return parsedContent
       } catch {
         return text
       }
@@ -235,9 +251,9 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
         id: 2,
         method: "tools/call",
         params: {
-          name: "vault_read",
+          name: "recall",
           arguments: {
-            path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
+            input: `Return the exact current content of ${KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH} if it exists. If it does not exist or is empty, return an empty result.`,
           },
         },
       },

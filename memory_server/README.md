@@ -2,6 +2,8 @@
 
 A remote MCP server that exposes a markdown knowledge base as a mounted filesystem. Navigate it with vault tools for tree, listing, reading, writing, updating, deleting, moving, directory creation, search, and backlinks.
 
+This is the low-level direct/admin server. In the full server-side KLONA stack, normal user-side agents should connect to the high-level `memory-agent` endpoint instead of this vault endpoint.
+
 This directory is self-contained. Run memory server commands from `KLONA/memory_server/`.
 
 ## Quick start
@@ -100,6 +102,11 @@ Content here. Link to related notes with [[wikilinks]].
 |----------|---------|-------------|
 | `AUTH_TOKEN` | empty | Bearer token. Empty disables auth. Use a private value for normal use. |
 | `HOST_VAULT_DIR` | `./vault` | Host path to vault directory mounted into the container. |
+| `ALLOWED_HOSTS` | empty | Optional comma-separated Host allowlist for DNS rebinding protection. |
+
+## Full server-side stack
+
+From the repository root, use `python3 scripts/init_memory_stack.py` or copy `.env.example` to `.env` and run `docker compose up --build`. The root Compose file runs this service as `memory-server` and a separate high-level `memory-agent` service. Only `memory-server` mounts `HOST_VAULT_DIR`; `memory-agent` persists only queue/state in a named Docker volume.
 
 ## Public safety
 

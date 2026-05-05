@@ -156,13 +156,21 @@ class OpenCodeInstallerTests(unittest.TestCase):
             },
         )
 
-    def test_install_copies_core_agent_and_plugin_files(self):
+    def test_install_copies_plugin_but_not_local_memory_subagent(self):
         self.install_with_prompts()
 
-        agent_copy = self.opencode / "agents" / "klona-memory.md"
         plugin_copy = self.opencode / "plugins" / "klona-memory-mental-model-injector.js"
-        self.assertEqual(agent_copy.read_text(), installer.AGENT_SOURCE.read_text())
+        self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
         self.assertEqual(plugin_copy.read_text(), installer.PLUGIN_SOURCE.read_text())
+
+    def test_install_removes_legacy_local_memory_subagent(self):
+        legacy_agent = self.opencode / "agents" / "klona-memory.md"
+        legacy_agent.parent.mkdir(parents=True, exist_ok=True)
+        legacy_agent.write_text("legacy owned agent")
+
+        self.install_with_prompts()
+
+        self.assertFalse(legacy_agent.exists())
 
     def test_installer_does_not_handle_legacy_session_plugin_filename(self):
         source = installer.Path(__file__).resolve().parents[1] / "klona_agent" / "opencode" / "install.py"
@@ -175,6 +183,8 @@ class OpenCodeInstallerTests(unittest.TestCase):
         agent.write_text("intro\n\n" + agent.read_text() + "\noutro\n")
         extra_agent = self.opencode / "agents" / "custom.md"
         extra_plugin = self.opencode / "plugins" / "custom.js"
+        extra_agent.parent.mkdir(parents=True, exist_ok=True)
+        extra_plugin.parent.mkdir(parents=True, exist_ok=True)
         extra_agent.write_text("custom agent")
         extra_plugin.write_text("custom plugin")
         config = self.read_config()
@@ -202,8 +212,8 @@ class OpenCodeInstallerTests(unittest.TestCase):
             url="https://prompted.example/mcp", token="prompt-token"
         )
 
-        input_mock.assert_called_once_with("Klona memory MCP URL: ")
-        getpass_mock.assert_called_once_with("Klona memory bearer token: ")
+        input_mock.assert_called_once_with("Klona high-level memory MCP URL: ")
+        getpass_mock.assert_called_once_with("Klona high-level memory bearer token: ")
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://prompted.example/mcp")
         self.assertEqual(entry["headers"]["Authorization"], "Bearer prompt-token")
@@ -220,25 +230,25 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertEqual(entry["headers"]["Authorization"], "Bearer arg-token")
 
     def test_install_with_empty_url_arg_raises_system_exit(self):
-        with self.assertRaisesRegex(SystemExit, "Klona memory MCP URL cannot be empty"):
+        with self.assertRaisesRegex(SystemExit, "Klona high-level memory MCP URL cannot be empty"):
             self.install_with_args(mcp_url="", mcp_token="arg-token")
 
         self.assertFalse((self.opencode / "opencode.json").exists())
 
     def test_install_with_whitespace_url_arg_raises_system_exit(self):
-        with self.assertRaisesRegex(SystemExit, "Klona memory MCP URL cannot be empty"):
+        with self.assertRaisesRegex(SystemExit, "Klona high-level memory MCP URL cannot be empty"):
             self.install_with_args(mcp_url="   \t", mcp_token="arg-token")
 
         self.assertFalse((self.opencode / "opencode.json").exists())
 
     def test_install_with_empty_token_arg_raises_system_exit(self):
-        with self.assertRaisesRegex(SystemExit, "Klona memory bearer token cannot be empty"):
+        with self.assertRaisesRegex(SystemExit, "Klona high-level memory bearer token cannot be empty"):
             self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="")
 
         self.assertFalse((self.opencode / "opencode.json").exists())
 
     def test_install_with_whitespace_token_arg_raises_system_exit(self):
-        with self.assertRaisesRegex(SystemExit, "Klona memory bearer token cannot be empty"):
+        with self.assertRaisesRegex(SystemExit, "Klona high-level memory bearer token cannot be empty"):
             self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="  \n")
 
         self.assertFalse((self.opencode / "opencode.json").exists())
@@ -258,7 +268,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         )
 
         input_mock.assert_not_called()
-        getpass_mock.assert_called_once_with("Klona memory bearer token: ")
+        getpass_mock.assert_called_once_with("Klona high-level memory bearer token: ")
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://args.example/mcp")
         self.assertEqual(entry["headers"]["Authorization"], "Bearer prompted-token")
@@ -268,7 +278,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
             mcp_token="arg-token", input_value="https://prompted.example/mcp"
         )
 
-        input_mock.assert_called_once_with("Klona memory MCP URL: ")
+        input_mock.assert_called_once_with("Klona high-level memory MCP URL: ")
         getpass_mock.assert_not_called()
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://prompted.example/mcp")

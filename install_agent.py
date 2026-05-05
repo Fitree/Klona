@@ -24,12 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--klona-memory-server-url",
         dest="mcp_url",
-        help="Klona memory MCP URL for non-interactive install.",
+        help="Klona high-level memory MCP URL for non-interactive install.",
     )
     parser.add_argument(
         "--klona-memory-server-token",
         dest="mcp_token",
-        help="Klona memory bearer token for non-interactive install.",
+        help="Klona high-level memory bearer token for non-interactive install.",
     )
     return parser
 
