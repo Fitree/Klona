@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import io
 import importlib
 import json
 import os
@@ -277,6 +278,63 @@ class OpenCodeConfigTests(unittest.TestCase):
         self.assertEqual(env["XDG_CONFIG_HOME"], tempdir)
         self.assertEqual(env["OPENCODE_CONFIG"], str(config_path))
 
+    def test_generated_config_omits_explicit_empty_reasoning_even_with_settings_default(self):
+        from memory_agent.config import Settings
+        from memory_agent.constants import MEMORY_AGENT_NAME
+        from memory_agent.runtime import generate_opencode_config
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            settings = Settings(
+                opencode_config_path=Path(tempdir) / "opencode.json",
+                opencode_reasoning_effort="high",
+            )
+
+            written = generate_opencode_config(settings, model="opencode/gpt-5-mini", reasoning_effort="")
+            data = json.loads(written.read_text())
+
+        agent_config = data["agent"][MEMORY_AGENT_NAME]
+        self.assertEqual(agent_config["model"], "opencode/gpt-5-mini")
+        self.assertNotIn("variant", agent_config)
+        self.assertNotIn("reasoningEffort", agent_config)
+
+    def test_generated_config_uses_settings_reasoning_when_reasoning_omitted(self):
+        from memory_agent.config import Settings
+        from memory_agent.constants import MEMORY_AGENT_NAME
+        from memory_agent.runtime import generate_opencode_config
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            settings = Settings(
+                opencode_config_path=Path(tempdir) / "opencode.json",
+                opencode_reasoning_effort="high",
+            )
+
+            written = generate_opencode_config(settings, model="opencode/gpt-5")
+            data = json.loads(written.read_text())
+
+        self.assertEqual(data["agent"][MEMORY_AGENT_NAME]["variant"], "high")
+
+    def test_no_variant_model_selection_feeds_config_without_stale_reasoning(self):
+        from memory_agent import runtime
+        from memory_agent.config import Settings
+        from memory_agent.constants import MEMORY_AGENT_NAME
+
+        models = [runtime.ModelChoice(model="opencode/gpt-5-mini", raw='opencode/gpt-5-mini\n{"id":"opencode/gpt-5-mini"}', variants=())]
+
+        with tempfile.TemporaryDirectory() as tempdir, mock.patch.object(runtime, "discover_models", return_value=models), mock.patch(
+            "builtins.input", side_effect=["1"]
+        ), mock.patch("sys.stdout", io.StringIO()):
+            model, reasoning = runtime.choose_model_and_reasoning(default_reasoning="high")
+            written = runtime.generate_opencode_config(
+                Settings(opencode_config_path=Path(tempdir) / "opencode.json", opencode_reasoning_effort="high"),
+                model,
+                reasoning,
+            )
+            data = json.loads(written.read_text())
+
+        self.assertEqual((model, reasoning), ("opencode/gpt-5-mini", ""))
+        self.assertNotIn("variant", data["agent"][MEMORY_AGENT_NAME])
+        self.assertNotIn("reasoningEffort", data["agent"][MEMORY_AGENT_NAME])
+
     def test_auth_and_model_commands_accept_shared_opencode_environment(self):
         from memory_agent import runtime
 
@@ -294,6 +352,128 @@ class OpenCodeConfigTests(unittest.TestCase):
 
         self.assertEqual(calls[0][1]["env"], {"XDG_CONFIG_HOME": "/tmp/klona-test-config"})
         self.assertEqual(calls[1][1]["env"], {"XDG_CONFIG_HOME": "/tmp/klona-test-config"})
+
+    def test_model_list_formatting_excludes_raw_json_and_variants_dump(self):
+        from memory_agent.runtime import ModelChoice, format_model_options
+
+        lines = format_model_options(
+            [
+                ModelChoice(
+                    model="opencode/gpt-5-nano",
+                    raw='opencode/gpt-5-nano\n{"id":"opencode/gpt-5-nano","variants":{"low":{},"high":{}}}',
+                    variants=("low", "high"),
+                )
+            ]
+        )
+
+        self.assertEqual(lines, ("1. opencode/gpt-5-nano",))
+        rendered = "\n".join(lines)
+        self.assertNotIn("{", rendered)
+        self.assertNotIn("variants", rendered.lower())
+        self.assertNotIn("low", rendered)
+
+    def test_variant_choices_are_shown_only_after_selected_model(self):
+        from memory_agent import runtime
+
+        models = [
+            runtime.ModelChoice(
+                model="opencode/gpt-5-nano",
+                raw='opencode/gpt-5-nano\n{"variants":{"low":{},"high":{}}}',
+                variants=("low", "high"),
+            ),
+            runtime.ModelChoice(
+                model="opencode/gpt-5",
+                raw='opencode/gpt-5\n{"variants":{"deep":{}}}',
+                variants=("deep",),
+            ),
+        ]
+        stdout = io.StringIO()
+
+        with mock.patch.object(runtime, "discover_models", return_value=models), mock.patch("builtins.input", side_effect=["2", "1"]), mock.patch(
+            "sys.stdout", stdout
+        ):
+            model, reasoning = runtime.choose_model_and_reasoning()
+
+        output = stdout.getvalue()
+        self.assertEqual((model, reasoning), ("opencode/gpt-5", "deep"))
+        self.assertIn("Reasoning effort/variant options for opencode/gpt-5", output)
+        self.assertIn("1. deep", output)
+        self.assertNotIn("low", output)
+        self.assertNotIn("high", output)
+        self.assertNotIn("{", output)
+
+    def test_model_input_zero_is_rejected_before_valid_selection(self):
+        from memory_agent import runtime
+
+        models = [
+            runtime.ModelChoice(model="opencode/gpt-5-nano", raw="opencode/gpt-5-nano", variants=()),
+            runtime.ModelChoice(model="opencode/gpt-5", raw="opencode/gpt-5", variants=()),
+        ]
+        stdout = io.StringIO()
+
+        with mock.patch.object(runtime, "discover_models", return_value=models), mock.patch("builtins.input", side_effect=["0", "1"]), mock.patch(
+            "sys.stdout", stdout
+        ):
+            model, reasoning = runtime.choose_model_and_reasoning()
+
+        self.assertEqual((model, reasoning), ("opencode/gpt-5-nano", ""))
+        self.assertIn("Choose a valid model number.", stdout.getvalue())
+
+    def test_variant_input_zero_is_rejected_before_valid_selection(self):
+        from memory_agent import runtime
+
+        models = [runtime.ModelChoice(model="opencode/gpt-5", raw="opencode/gpt-5", variants=("low", "high"))]
+        stdout = io.StringIO()
+
+        with mock.patch.object(runtime, "discover_models", return_value=models), mock.patch("builtins.input", side_effect=["1", "0", "2"]), mock.patch(
+            "sys.stdout", stdout
+        ):
+            model, reasoning = runtime.choose_model_and_reasoning()
+
+        self.assertEqual((model, reasoning), ("opencode/gpt-5", "high"))
+        self.assertIn("Choose a valid reasoning effort/variant number.", stdout.getvalue())
+
+    def test_model_with_no_variants_does_not_prompt_or_dump_json(self):
+        from memory_agent import runtime
+
+        models = [
+            runtime.ModelChoice(
+                model="opencode/gpt-5-mini",
+                raw='opencode/gpt-5-mini\n{"id":"opencode/gpt-5-mini"}',
+                variants=(),
+            )
+        ]
+        stdout = io.StringIO()
+
+        with mock.patch.object(runtime, "discover_models", return_value=models), mock.patch("builtins.input", side_effect=["1"]) as fake_input, mock.patch(
+            "sys.stdout", stdout
+        ):
+            model, reasoning = runtime.choose_model_and_reasoning(default_reasoning="high")
+
+        self.assertEqual((model, reasoning), ("opencode/gpt-5-mini", ""))
+        self.assertEqual(fake_input.call_count, 1)
+        output = stdout.getvalue()
+        self.assertIn("1. opencode/gpt-5-mini", output)
+        self.assertNotIn("{", output)
+        self.assertNotIn("reasoning effort/variant options", output.lower())
+
+    def test_blank_variant_choice_does_not_use_default_outside_selected_variants(self):
+        from memory_agent import runtime
+
+        models = [
+            runtime.ModelChoice(
+                model="opencode/gpt-5-nano",
+                raw='opencode/gpt-5-nano\n{"variants":{"low":{},"medium":{}}}',
+                variants=("low", "medium"),
+            )
+        ]
+
+        with mock.patch.object(runtime, "discover_models", return_value=models), mock.patch("builtins.input", side_effect=["1", ""]), mock.patch(
+            "sys.stdout", io.StringIO()
+        ):
+            model, reasoning = runtime.choose_model_and_reasoning(default_reasoning="high")
+
+        self.assertEqual((model, reasoning), ("opencode/gpt-5-nano", ""))
 
 
 class FakeResponse:

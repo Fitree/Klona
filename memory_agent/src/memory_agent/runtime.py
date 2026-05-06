@@ -133,42 +133,51 @@ def choose_model_and_reasoning(default_model: str = "", default_reasoning: str =
         if default_model:
             return default_model, default_reasoning
         raise RuntimeError("OpenCode did not report any available models")
-    for index, choice in enumerate(models, 1):
-        suffix = f" variants={', '.join(choice.variants)}" if choice.variants else ""
-        print(f"{index}. {choice.model}{suffix}")
-        if choice.raw != choice.model:
-            print(f"   {choice.raw}")
+    for line in format_model_options(models):
+        print(line)
     while True:
         raw = input("Choose OpenCode model number: ").strip()
         try:
-            choice = models[int(raw) - 1]
-        except (ValueError, IndexError):
+            selected_index = int(raw)
+            if selected_index < 1 or selected_index > len(models):
+                raise ValueError
+            choice = models[selected_index - 1]
+        except ValueError:
             print("Choose a valid model number.")
             continue
         break
     if choice.variants:
+        print(f"Reasoning effort/variant options for {choice.model}:")
         for index, variant in enumerate(choice.variants, 1):
             print(f"{index}. {variant}")
         while True:
             raw_variant = input("Choose reasoning effort/variant number (blank for default): ").strip()
             if not raw_variant:
-                reasoning = default_reasoning
+                reasoning = default_reasoning if default_reasoning in choice.variants else ""
                 break
             try:
-                reasoning = choice.variants[int(raw_variant) - 1]
-            except (ValueError, IndexError):
+                selected_variant_index = int(raw_variant)
+                if selected_variant_index < 1 or selected_variant_index > len(choice.variants):
+                    raise ValueError
+                reasoning = choice.variants[selected_variant_index - 1]
+            except ValueError:
                 print("Choose a valid reasoning effort/variant number.")
                 continue
             break
     else:
-        reasoning = input("Choose reasoning effort/variant (OpenCode reported no variants; blank for default): ").strip() or default_reasoning
+        reasoning = ""
     return choice.model, reasoning
 
 
-def generate_opencode_config(settings: Settings, model: str = "", reasoning_effort: str = "") -> Path:
+def format_model_options(models: Sequence[ModelChoice]) -> tuple[str, ...]:
+    """Return concise user-facing model menu lines without verbose discovery details."""
+    return tuple(f"{index}. {choice.model}" for index, choice in enumerate(models, 1))
+
+
+def generate_opencode_config(settings: Settings, model: str = "", reasoning_effort: str | None = None) -> Path:
     """Write an OpenCode config that only grants the low-level Klona memory MCP tools."""
     selected_model = model or settings.opencode_model
-    selected_reasoning = reasoning_effort or settings.opencode_reasoning_effort
+    selected_reasoning = settings.opencode_reasoning_effort if reasoning_effort is None else reasoning_effort
     agent_model_config = {"model": selected_model}
     if selected_reasoning:
         agent_model_config["variant"] = selected_reasoning
