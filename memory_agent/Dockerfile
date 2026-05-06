@@ -2,14 +2,15 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1
-ENV PATH="/root/.local/bin:/app/.venv/bin:$PATH"
+ENV PATH="/root/.opencode/bin:/root/.local/bin:/app/.venv/bin:$PATH"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash curl ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the OpenCode CLI using the documented installer.
-RUN curl -fsSL https://opencode.ai/install | bash
+RUN curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path \
+    && opencode --version
 
 COPY pyproject.toml* ./
 COPY src/ ./src/

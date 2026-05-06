@@ -82,6 +82,8 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("OpenCode CLI", dockerfile)
         self.assertIn("apt-get install -y --no-install-recommends bash curl", dockerfile)
         self.assertIn("curl -fsSL https://opencode.ai/install | bash", dockerfile)
+        self.assertIn('/root/.opencode/bin', dockerfile)
+        self.assertIn('opencode --version', dockerfile)
         self.assertNotIn("curl -fsSL https://opencode.ai/install | sh", dockerfile)
 
     def test_memory_agent_pyproject_declares_hatch_package(self):
