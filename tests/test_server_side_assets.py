@@ -66,6 +66,14 @@ class ServerSideAssetTests(unittest.TestCase):
         dockerfile = (ROOT / "memory_agent" / "Dockerfile").read_text()
         self.assertIn('CMD ["python", "-m", "memory_agent.runtime"]', dockerfile)
         self.assertIn("OpenCode CLI", dockerfile)
+        self.assertIn("apt-get install -y --no-install-recommends bash curl", dockerfile)
+        self.assertIn("curl -fsSL https://opencode.ai/install | bash", dockerfile)
+        self.assertNotIn("curl -fsSL https://opencode.ai/install | sh", dockerfile)
+
+    def test_memory_agent_pyproject_declares_hatch_package(self):
+        pyproject = (ROOT / "memory_agent" / "pyproject.toml").read_text()
+        self.assertIn('[tool.hatch.build.targets.wheel]', pyproject)
+        self.assertIn('packages = ["src/memory_agent"]', pyproject)
 
     def test_opencode_snippet_uses_high_level_tools_not_local_subagent(self):
         snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()

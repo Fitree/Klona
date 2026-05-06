@@ -5,11 +5,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH="/root/.local/bin:/app/.venv/bin:$PATH"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates git \
+    && apt-get install -y --no-install-recommends bash curl ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install the OpenCode CLI using the documented installer.
-RUN curl -fsSL https://opencode.ai/install | sh
+RUN curl -fsSL https://opencode.ai/install | bash
 
 COPY pyproject.toml* ./
 COPY src/ ./src/
