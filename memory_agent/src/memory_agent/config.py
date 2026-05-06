@@ -40,6 +40,14 @@ def _first_env(names: tuple[str, ...], default: str = "") -> str:
     return default
 
 
+def _allowed_hosts() -> tuple[str, ...]:
+    if "HIGH_LEVEL_ALLOWED_HOSTS" in os.environ:
+        raw = os.environ["HIGH_LEVEL_ALLOWED_HOSTS"]
+    else:
+        raw = os.environ.get("MEMORY_AGENT_ALLOWED_HOSTS", "")
+    return tuple(h.strip() for h in raw.split(",") if h.strip())
+
+
 def _memory_timeout_seconds() -> float:
     return float(_first_env(("MEMORY_AGENT_TIMEOUT_SECONDS", "MEMORY_AGENT_RECALL_TIMEOUT_SECONDS"), str(DEFAULT_RECALL_TIMEOUT_SECONDS)))
 
@@ -62,9 +70,7 @@ class Settings:
     poll_interval_seconds: float = field(default_factory=lambda: _float_env("MEMORY_AGENT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS))
     worker_idle_sleep_seconds: float = field(default_factory=lambda: _float_env("MEMORY_AGENT_WORKER_IDLE_SLEEP_SECONDS", DEFAULT_WORKER_IDLE_SLEEP_SECONDS))
     auth_token: str = field(default_factory=lambda: os.environ.get("HIGH_LEVEL_MCP_AUTH_TOKEN", os.environ.get("MEMORY_AGENT_AUTH_TOKEN", "")))
-    allowed_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
-        h.strip() for h in _first_env(("HIGH_LEVEL_ALLOWED_HOSTS", "MEMORY_AGENT_ALLOWED_HOSTS")).split(",") if h.strip()
-    ))
+    allowed_hosts: tuple[str, ...] = field(default_factory=_allowed_hosts)
     opencode_base_url: str = field(default_factory=_opencode_base_url)
     opencode_model: str = field(default_factory=lambda: _first_env(("MEMORY_AGENT_MODEL", "OPENCODE_MODEL")))
     opencode_reasoning_effort: str = field(default_factory=lambda: _first_env(("MEMORY_AGENT_REASONING_EFFORT", "OPENCODE_REASONING_EFFORT")))

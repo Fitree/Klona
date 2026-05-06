@@ -23,7 +23,7 @@ Start the stack interactively from this repository:
 python3 scripts/init_memory_stack.py
 ```
 
-The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
+The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. Allowed-host prompts also default to empty, which disables DNS rebinding protection and allows all Host headers; set comma-separated allowed-host lists manually if you want Host header checks. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
 
 After the high-level memory-agent health endpoint is reachable, the init script automatically sends Docker's detach sequence and exits successfully while leaving the same `memory-agent` container running. If setup, build, startup, or the foreground memory-agent exits before that healthy detach point, the init script stops the detached `memory-server` container as cleanup.
 
@@ -95,7 +95,7 @@ The result is a memory loop where user-side agents use simple recall/remember to
 
 ### Auth and model flow
 
-- Low-level and high-level MCP endpoints use separate bearer tokens and allowed-host settings. Empty tokens disable auth for the corresponding endpoint; non-empty tokens require exact Bearer auth.
+- Low-level and high-level MCP endpoints use separate bearer tokens and allowed-host settings. Empty tokens disable auth for the corresponding endpoint; non-empty tokens require exact Bearer auth. Empty allowed-host settings allow all Host headers; non-empty comma-separated lists enable DNS rebinding protection.
 - The memory-agent receives the low-level URL/token over the internal Compose network.
 - During first attached startup, the memory-agent container asks whether to run `opencode auth login`. If auth fails, it asks whether to retry, proceed without auth, or terminate.
 - After auth/proceed, the container discovers available OpenCode models and asks for model and reasoning-effort choices inside the final runtime container.

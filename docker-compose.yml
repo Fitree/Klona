@@ -8,7 +8,7 @@ services:
     environment:
       VAULT_DIR: /vault
       AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}
-      ALLOWED_HOSTS: ${LOW_LEVEL_ALLOWED_HOSTS:-localhost,127.0.0.1,memory-server:8000}
+      ALLOWED_HOSTS: ${LOW_LEVEL_ALLOWED_HOSTS-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -25,7 +25,7 @@ services:
       - "${HIGH_LEVEL_MCP_HOST_PORT:-32311}:8080"
     environment:
       HIGH_LEVEL_MCP_AUTH_TOKEN: ${HIGH_LEVEL_MCP_AUTH_TOKEN:-}
-      HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS-}
       LOW_LEVEL_MCP_URL: ${LOW_LEVEL_MCP_URL:-http://memory-server:8000/mcp}
       LOW_LEVEL_MCP_AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}
       MEMORY_AGENT_QUEUE_DB: ${MEMORY_AGENT_QUEUE_DB:-/state/queue.db}

@@ -41,10 +41,10 @@ DEFAULTS = {
     "HOST_VAULT_DIR": "./vault",
     "LOW_LEVEL_MCP_HOST_PORT": "32310",
     "LOW_LEVEL_MCP_AUTH_TOKEN": "",
-    "LOW_LEVEL_ALLOWED_HOSTS": "localhost,127.0.0.1,memory-server:8000",
+    "LOW_LEVEL_ALLOWED_HOSTS": "",
     "HIGH_LEVEL_MCP_HOST_PORT": "32311",
     "HIGH_LEVEL_MCP_AUTH_TOKEN": "",
-    "HIGH_LEVEL_ALLOWED_HOSTS": "localhost,127.0.0.1",
+    "HIGH_LEVEL_ALLOWED_HOSTS": "",
     "LOW_LEVEL_MCP_URL": "http://memory-server:8000/mcp",
     "MEMORY_AGENT_QUEUE_DB": "/state/queue.db",
     "MEMORY_AGENT_STATE_DIR": "/state",
@@ -201,10 +201,14 @@ def collect_values() -> dict[str, str]:
         "HOST_VAULT_DIR": _ask("Host markdown vault directory", DEFAULTS["HOST_VAULT_DIR"]),
         "LOW_LEVEL_MCP_HOST_PORT": low_port,
         "LOW_LEVEL_MCP_AUTH_TOKEN": _ask("Low-level admin MCP bearer token (empty disables auth)", DEFAULTS["LOW_LEVEL_MCP_AUTH_TOKEN"]),
-        "LOW_LEVEL_ALLOWED_HOSTS": _ask("Low-level allowed hosts (comma-separated)", DEFAULTS["LOW_LEVEL_ALLOWED_HOSTS"]),
+        "LOW_LEVEL_ALLOWED_HOSTS": _ask(
+            "Low-level allowed hosts (empty allows all Host headers)", DEFAULTS["LOW_LEVEL_ALLOWED_HOSTS"]
+        ),
         "HIGH_LEVEL_MCP_HOST_PORT": high_port,
         "HIGH_LEVEL_MCP_AUTH_TOKEN": _ask("High-level user-agent MCP bearer token (empty disables auth)", DEFAULTS["HIGH_LEVEL_MCP_AUTH_TOKEN"]),
-        "HIGH_LEVEL_ALLOWED_HOSTS": _ask("High-level allowed hosts (comma-separated)", DEFAULTS["HIGH_LEVEL_ALLOWED_HOSTS"]),
+        "HIGH_LEVEL_ALLOWED_HOSTS": _ask(
+            "High-level allowed hosts (empty allows all Host headers)", DEFAULTS["HIGH_LEVEL_ALLOWED_HOSTS"]
+        ),
         "LOW_LEVEL_MCP_URL": _ask("Low-level MCP URL from memory-agent container", DEFAULTS["LOW_LEVEL_MCP_URL"]),
         "MEMORY_AGENT_QUEUE_DB": _ask("Memory-agent queue DB path in container", DEFAULTS["MEMORY_AGENT_QUEUE_DB"]),
         "MEMORY_AGENT_STATE_DIR": _ask("Memory-agent state dir in container", DEFAULTS["MEMORY_AGENT_STATE_DIR"]),

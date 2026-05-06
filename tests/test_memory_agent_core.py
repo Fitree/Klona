@@ -223,6 +223,38 @@ class OpenCodeConfigTests(unittest.TestCase):
 
         self.assertEqual(settings.auth_token, "legacy-secret")
 
+    def test_explicit_empty_high_level_allowed_hosts_disables_legacy_fallback(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(
+            os.environ,
+            {"HIGH_LEVEL_ALLOWED_HOSTS": "", "MEMORY_AGENT_ALLOWED_HOSTS": "legacy.example,localhost"},
+            clear=True,
+        ):
+            settings = Settings()
+
+        self.assertEqual(settings.allowed_hosts, ())
+
+    def test_legacy_memory_agent_allowed_hosts_still_supported_when_high_level_unset(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(os.environ, {"MEMORY_AGENT_ALLOWED_HOSTS": "legacy.example, localhost:8080"}, clear=True):
+            settings = Settings()
+
+        self.assertEqual(settings.allowed_hosts, ("legacy.example", "localhost:8080"))
+
+    def test_non_empty_high_level_allowed_hosts_parse_as_comma_separated_list(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(
+            os.environ,
+            {"HIGH_LEVEL_ALLOWED_HOSTS": " high.example,localhost:8080 ,, 127.0.0.1 ", "MEMORY_AGENT_ALLOWED_HOSTS": "legacy.example"},
+            clear=True,
+        ):
+            settings = Settings()
+
+        self.assertEqual(settings.allowed_hosts, ("high.example", "localhost:8080", "127.0.0.1"))
+
     def test_generated_config_limits_permissions_to_low_level_memory_tools(self):
         from memory_agent.config import Settings
         from memory_agent.constants import LOW_LEVEL_MCP_NAME, MEMORY_AGENT_NAME
