@@ -23,7 +23,17 @@ Start the stack interactively from this repository:
 python3 scripts/init_memory_stack.py
 ```
 
-The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment. When the foreground memory-agent exits or is interrupted, the init script stops the detached `memory-server` container.
+The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
+
+After the high-level memory-agent health endpoint is reachable, the init script automatically sends Docker's detach sequence and exits successfully while leaving the same `memory-agent` container running. If setup, build, startup, or the foreground memory-agent exits before that healthy detach point, the init script stops the detached `memory-server` container as cleanup.
+
+Stop the running stack later with:
+
+```bash
+docker compose down
+```
+
+If you need to inspect or stop only the one-off memory-agent container, use `docker compose ps` to find it and `docker stop <container>`.
 
 Verify the services are running:
 
