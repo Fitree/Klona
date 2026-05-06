@@ -61,7 +61,7 @@ class Settings:
     max_retries: int = field(default_factory=lambda: _int_env("MEMORY_AGENT_MAX_RETRIES", DEFAULT_MAX_RETRIES))
     poll_interval_seconds: float = field(default_factory=lambda: _float_env("MEMORY_AGENT_POLL_INTERVAL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS))
     worker_idle_sleep_seconds: float = field(default_factory=lambda: _float_env("MEMORY_AGENT_WORKER_IDLE_SLEEP_SECONDS", DEFAULT_WORKER_IDLE_SLEEP_SECONDS))
-    auth_token: str = field(default_factory=lambda: _first_env(("HIGH_LEVEL_MCP_AUTH_TOKEN", "MEMORY_AGENT_AUTH_TOKEN")))
+    auth_token: str = field(default_factory=lambda: os.environ.get("HIGH_LEVEL_MCP_AUTH_TOKEN", os.environ.get("MEMORY_AGENT_AUTH_TOKEN", "")))
     allowed_hosts: tuple[str, ...] = field(default_factory=lambda: tuple(
         h.strip() for h in _first_env(("HIGH_LEVEL_ALLOWED_HOSTS", "MEMORY_AGENT_ALLOWED_HOSTS")).split(",") if h.strip()
     ))

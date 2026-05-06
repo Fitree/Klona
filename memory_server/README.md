@@ -14,10 +14,10 @@ This directory is self-contained. Run memory server commands from `KLONA/memory_
 cp .env.example .env
 ```
 
-Edit `.env` and set a private bearer token:
+Edit `.env` and optionally set a private bearer token. Empty `AUTH_TOKEN` disables auth; a non-empty value requires `Authorization: Bearer <token>`.
 
 ```text
-AUTH_TOKEN=replace-with-a-private-token
+AUTH_TOKEN=
 ```
 
 ### 2. Start
@@ -40,7 +40,7 @@ From the repository root, run:
 python install_agent.py --platform opencode
 ```
 
-When prompted, enter the memory MCP URL and the bearer token from `.env`.
+When prompted, enter the memory MCP URL and the bearer token from `.env`; leave the token empty if `AUTH_TOKEN` is empty.
 
 For local Docker Compose usage, the MCP URL is usually:
 

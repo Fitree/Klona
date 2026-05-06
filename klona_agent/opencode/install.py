@@ -93,11 +93,9 @@ def _prompt_mcp_url() -> str:
 
 def _prompt_mcp_token() -> str:
     try:
-        value = getpass.getpass("Klona high-level memory bearer token: ").strip()
+        value = getpass.getpass("Klona high-level memory bearer token (empty disables auth): ").strip()
     except (EOFError, KeyboardInterrupt) as exc:
         raise SystemExit("Klona high-level memory bearer token entry cancelled") from exc
-    if not value:
-        raise SystemExit("Klona high-level memory bearer token cannot be empty")
     return value
 
 
@@ -109,13 +107,15 @@ def _provided_value(value: str, empty_message: str) -> str:
 
 
 def _mcp_entry(url: str, token: str) -> dict[str, Any]:
-    return {
+    entry = {
         "type": "remote",
         "url": url,
         "enabled": True,
         "oauth": False,
-        "headers": {"Authorization": f"Bearer {token}"},
     }
+    if token:
+        entry["headers"] = {"Authorization": f"Bearer {token}"}
+    return entry
 
 
 def _managed_block() -> str:
@@ -246,7 +246,7 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         else _prompt_mcp_url()
     )
     token = (
-        _provided_value(mcp_token, "Klona high-level memory bearer token cannot be empty")
+        mcp_token.strip()
         if mcp_token is not None
         else _prompt_mcp_token()
     )

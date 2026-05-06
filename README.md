@@ -23,7 +23,7 @@ Start the stack interactively from this repository:
 python3 scripts/init_memory_stack.py
 ```
 
-The init script asks non-model setup questions first, writes `.env`, then runs `docker compose up --build` attached. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
+The init script asks non-model setup questions first, writes `.env`, then runs `docker compose up --build` attached. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
 
 Verify the services are running:
 
@@ -57,7 +57,7 @@ Install the OpenCode integration:
 python install_agent.py --platform opencode
 ```
 
-The installer asks for the high-level Klona memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`. For the default stack, use `http://localhost:32311/mcp` and `HIGH_LEVEL_MCP_AUTH_TOKEN` from `.env`.
+The installer asks for the high-level Klona memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`. For the default stack, use `http://localhost:32311/mcp` and `HIGH_LEVEL_MCP_AUTH_TOKEN` from `.env`; leave the installer token empty if the high-level token is empty.
 
 For non-interactive installs, pass the MCP URL and bearer token as dashed arguments:
 
@@ -85,7 +85,7 @@ The result is a memory loop where user-side agents use simple recall/remember to
 
 ### Auth and model flow
 
-- Low-level and high-level MCP endpoints use separate bearer tokens and allowed-host settings.
+- Low-level and high-level MCP endpoints use separate bearer tokens and allowed-host settings. Empty tokens disable auth for the corresponding endpoint; non-empty tokens require exact Bearer auth.
 - The memory-agent receives the low-level URL/token over the internal Compose network.
 - During first attached startup, the memory-agent container asks whether to run `opencode auth login`. If auth fails, it asks whether to retry, proceed without auth, or terminate.
 - After auth/proceed, the container discovers available OpenCode models and asks for model and reasoning-effort choices inside the final runtime container.

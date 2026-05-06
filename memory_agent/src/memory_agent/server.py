@@ -38,6 +38,14 @@ mcp = FastMCP(
 queue = MemoryQueue(settings.queue_db_path)
 
 
+def _is_authorized(auth_header: str, auth_token: str) -> bool:
+    """Return whether a request is authorized for the configured token.
+
+    An empty token intentionally disables auth for this MCP server.
+    """
+    return not auth_token or auth_header == f"Bearer {auth_token}"
+
+
 @mcp.tool()
 async def remember(input: str) -> dict:
     """Queue information for durable memory storage.
@@ -84,12 +92,11 @@ class AuthMiddleware:
             if request.url.path == "/health":
                 await self.app(scope, receive, send)
                 return
-            if settings.auth_token:
-                auth_header = request.headers.get("authorization", "")
-                if auth_header != f"Bearer {settings.auth_token}":
-                    response = JSONResponse({"error": "Unauthorized"}, status_code=401)
-                    await response(scope, receive, send)
-                    return
+            auth_header = request.headers.get("authorization", "")
+            if not _is_authorized(auth_header, settings.auth_token):
+                response = JSONResponse({"error": "Unauthorized"}, status_code=401)
+                await response(scope, receive, send)
+                return
         await self.app(scope, receive, send)
 
 

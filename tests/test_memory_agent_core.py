@@ -14,7 +14,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 MEMORY_AGENT_SRC = ROOT / "memory_agent" / "src"
+MEMORY_SERVER_SRC = ROOT / "memory_server" / "src"
 sys.path.insert(0, str(MEMORY_AGENT_SRC))
+sys.path.insert(0, str(MEMORY_SERVER_SRC))
 warnings.simplefilter("ignore", ResourceWarning)
 
 
@@ -199,6 +201,26 @@ class OpenCodeConfigTests(unittest.TestCase):
             settings = Settings()
 
         self.assertEqual(settings.opencode_base_url, "http://opencode.example:7000")
+
+    def test_explicit_empty_high_level_token_disables_legacy_auth_fallback(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(
+            os.environ,
+            {"HIGH_LEVEL_MCP_AUTH_TOKEN": "", "MEMORY_AGENT_AUTH_TOKEN": "legacy-secret"},
+            clear=True,
+        ):
+            settings = Settings()
+
+        self.assertEqual(settings.auth_token, "")
+
+    def test_legacy_memory_agent_auth_token_still_supported_when_high_level_unset(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(os.environ, {"MEMORY_AGENT_AUTH_TOKEN": "legacy-secret"}, clear=True):
+            settings = Settings()
+
+        self.assertEqual(settings.auth_token, "legacy-secret")
 
     def test_generated_config_limits_permissions_to_low_level_memory_tools(self):
         from memory_agent.config import Settings
@@ -438,6 +460,36 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(item.kind, "recall")
             self.assertEqual(item.input, "what do I know?")
             self.assertEqual(item.status, "succeeded")
+
+    async def test_high_level_empty_token_disables_auth_check(self):
+        self.assertTrue(self.server._is_authorized("", ""))
+        self.assertTrue(self.server._is_authorized("Bearer anything", ""))
+
+    async def test_high_level_non_empty_token_requires_bearer_auth(self):
+        self.assertFalse(self.server._is_authorized("", "high-secret"))
+        self.assertFalse(self.server._is_authorized("Bearer wrong", "high-secret"))
+        self.assertTrue(self.server._is_authorized("Bearer high-secret", "high-secret"))
+
+
+class LowLevelServerAuthTests(unittest.TestCase):
+    def setUp(self):
+        self.module_patcher = mock.patch.dict(sys.modules, install_fake_server_dependencies())
+        self.module_patcher.start()
+        self.addCleanup(self.module_patcher.stop)
+        self.env_patcher = mock.patch.dict(os.environ, {"VAULT_DIR": "/tmp/klona-test-vault", "AUTH_TOKEN": ""})
+        self.env_patcher.start()
+        self.addCleanup(self.env_patcher.stop)
+        sys.modules.pop("server", None)
+        self.server = importlib.import_module("server")
+
+    def test_empty_token_disables_auth_check(self):
+        self.assertTrue(self.server._is_authorized("", ""))
+        self.assertTrue(self.server._is_authorized("Bearer anything", ""))
+
+    def test_non_empty_token_requires_bearer_auth(self):
+        self.assertFalse(self.server._is_authorized("", "low-secret"))
+        self.assertFalse(self.server._is_authorized("Bearer wrong", "low-secret"))
+        self.assertTrue(self.server._is_authorized("Bearer low-secret", "low-secret"))
 
 
 class PromptTests(unittest.TestCase):

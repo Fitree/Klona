@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 VAULT_DIR = Path(os.environ.get("VAULT_DIR", "/vault"))
 AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "")
 # Comma-separated list of allowed Host header values for DNS rebinding protection.
-# Supports wildcard ports like "example.com:*". Empty disables protection (Bearer auth still applies).
+# Supports wildcard ports like "example.com:*". Empty disables protection (Bearer auth still applies only when AUTH_TOKEN is non-empty).
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
 SERVER_INSTRUCTIONS = """\
@@ -74,6 +74,14 @@ mcp = FastMCP(
     json_response=True,
     transport_security=_transport_security,
 )
+
+
+def _is_authorized(auth_header: str, auth_token: str) -> bool:
+    """Return whether a request is authorized for the configured token.
+
+    An empty token intentionally disables auth for this MCP server.
+    """
+    return not auth_token or auth_header == f"Bearer {auth_token}"
 
 
 # ---------------------------------------------------------------------------
@@ -685,12 +693,11 @@ class AuthMiddleware:
             if request.url.path == "/health":
                 await self.app(scope, receive, send)
                 return
-            if AUTH_TOKEN:
-                auth_header = request.headers.get("authorization", "")
-                if auth_header != f"Bearer {AUTH_TOKEN}":
-                    response = JSONResponse({"error": "Unauthorized"}, status_code=401)
-                    await response(scope, receive, send)
-                    return
+            auth_header = request.headers.get("authorization", "")
+            if not _is_authorized(auth_header, AUTH_TOKEN):
+                response = JSONResponse({"error": "Unauthorized"}, status_code=401)
+                await response(scope, receive, send)
+                return
         await self.app(scope, receive, send)
 
 

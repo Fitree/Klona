@@ -213,10 +213,17 @@ class OpenCodeInstallerTests(unittest.TestCase):
         )
 
         input_mock.assert_called_once_with("Klona high-level memory MCP URL: ")
-        getpass_mock.assert_called_once_with("Klona high-level memory bearer token: ")
+        getpass_mock.assert_called_once_with("Klona high-level memory bearer token (empty disables auth): ")
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://prompted.example/mcp")
         self.assertEqual(entry["headers"]["Authorization"], "Bearer prompt-token")
+
+    def test_install_with_empty_prompted_token_omits_authorization_header(self):
+        self.install_with_prompts(url="https://prompted.example/mcp", token="")
+
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://prompted.example/mcp")
+        self.assertNotIn("headers", entry)
 
     def test_install_with_mcp_args_does_not_prompt_and_writes_mcp_entry(self):
         input_mock, getpass_mock = self.install_with_args(
@@ -241,17 +248,19 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
         self.assertFalse((self.opencode / "opencode.json").exists())
 
-    def test_install_with_empty_token_arg_raises_system_exit(self):
-        with self.assertRaisesRegex(SystemExit, "Klona high-level memory bearer token cannot be empty"):
-            self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="")
+    def test_install_with_empty_token_arg_omits_authorization_header(self):
+        self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="")
 
-        self.assertFalse((self.opencode / "opencode.json").exists())
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://args.example/mcp")
+        self.assertNotIn("headers", entry)
 
-    def test_install_with_whitespace_token_arg_raises_system_exit(self):
-        with self.assertRaisesRegex(SystemExit, "Klona high-level memory bearer token cannot be empty"):
-            self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="  \n")
+    def test_install_with_whitespace_token_arg_omits_authorization_header(self):
+        self.install_with_args(mcp_url="https://args.example/mcp", mcp_token="  \n")
 
-        self.assertFalse((self.opencode / "opencode.json").exists())
+        entry = self.read_config()["mcp"][installer.MCP_NAME]
+        self.assertEqual(entry["url"], "https://args.example/mcp")
+        self.assertNotIn("headers", entry)
 
     def test_install_with_mcp_args_strips_values(self):
         self.install_with_args(
@@ -268,7 +277,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         )
 
         input_mock.assert_not_called()
-        getpass_mock.assert_called_once_with("Klona high-level memory bearer token: ")
+        getpass_mock.assert_called_once_with("Klona high-level memory bearer token (empty disables auth): ")
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://args.example/mcp")
         self.assertEqual(entry["headers"]["Authorization"], "Bearer prompted-token")

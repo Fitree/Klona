@@ -40,6 +40,9 @@ class ServerSideAssetTests(unittest.TestCase):
         ]:
             self.assertIn(f"{name}=", env)
         self.assertIn("LOW_LEVEL_ALLOWED_HOSTS=localhost,127.0.0.1,memory-server:8000", env)
+        self.assertIn("LOW_LEVEL_MCP_AUTH_TOKEN=\n", env)
+        self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
+        self.assertIn("Empty disables auth", env)
 
     def test_init_script_is_parseable_and_runs_compose_attached(self):
         script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
@@ -48,6 +51,11 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("OPENCODE_MODEL", script)
         self.assertNotIn("OPENCODE_REASONING_EFFORT", script)
         self.assertIn('"localhost,127.0.0.1,memory-server:8000"', script)
+        self.assertNotIn("secrets", script)
+        self.assertNotIn("token_urlsafe", script)
+        self.assertIn('"LOW_LEVEL_MCP_AUTH_TOKEN": ""', script)
+        self.assertIn('"HIGH_LEVEL_MCP_AUTH_TOKEN": ""', script)
+        self.assertIn("empty disables auth", script)
 
     def test_legacy_local_memory_agent_asset_is_marked_deprecated(self):
         asset = (ROOT / "klona_agent" / "opencode" / "assets" / "agents" / "klona-memory.md").read_text()
