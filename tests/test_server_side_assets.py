@@ -44,10 +44,14 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
         self.assertIn("Empty disables auth", env)
 
-    def test_init_script_is_parseable_and_runs_compose_attached(self):
+    def test_init_script_is_parseable_and_runs_two_phase_interactive_start(self):
         script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
         ast.parse(script)
-        self.assertIn('["docker", "compose", "up", "--build", "--abort-on-container-exit"]', script)
+        self.assertIn('["docker", "compose", "build"]', script)
+        self.assertIn('["docker", "compose", "up", "-d", "--wait", "memory-server"]', script)
+        self.assertIn('["docker", "compose", "run", "--rm", "--service-ports", "--no-deps", "memory-agent"]', script)
+        self.assertIn('["docker", "compose", "stop", "memory-server"]', script)
+        self.assertNotIn('"--abort-on-container-exit"', script)
         self.assertNotIn("OPENCODE_MODEL", script)
         self.assertNotIn("OPENCODE_REASONING_EFFORT", script)
         self.assertIn('"localhost,127.0.0.1,memory-server:8000"', script)
@@ -56,6 +60,16 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn('"LOW_LEVEL_MCP_AUTH_TOKEN": ""', script)
         self.assertIn('"HIGH_LEVEL_MCP_AUTH_TOKEN": ""', script)
         self.assertIn("empty disables auth", script)
+
+    def test_init_command_sequence_is_guarded_for_interactive_memory_agent(self):
+        script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
+        self.assertLess(script.index("BUILD_CMD"), script.index("START_MEMORY_SERVER_CMD"))
+        self.assertLess(script.index("START_MEMORY_SERVER_CMD"), script.index("RUN_MEMORY_AGENT_CMD"))
+        self.assertLess(script.index("subprocess.run(BUILD_CMD"), script.index("subprocess.run(START_MEMORY_SERVER_CMD"))
+        self.assertLess(script.index("subprocess.run(START_MEMORY_SERVER_CMD"), script.index("subprocess.call(RUN_MEMORY_AGENT_CMD"))
+        self.assertLess(script.index("Stopping partially started low-level memory-server"), script.index("subprocess.call(RUN_MEMORY_AGENT_CMD"))
+        self.assertIn("finally:", script)
+        self.assertIn("subprocess.run(STOP_MEMORY_SERVER_CMD", script)
 
     def test_legacy_local_memory_agent_asset_is_marked_deprecated(self):
         asset = (ROOT / "klona_agent" / "opencode" / "assets" / "agents" / "klona-memory.md").read_text()

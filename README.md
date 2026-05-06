@@ -23,7 +23,7 @@ Start the stack interactively from this repository:
 python3 scripts/init_memory_stack.py
 ```
 
-The init script asks non-model setup questions first, writes `.env`, then runs `docker compose up --build` attached. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
+The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment. When the foreground memory-agent exits or is interrupted, the init script stops the detached `memory-server` container.
 
 Verify the services are running:
 

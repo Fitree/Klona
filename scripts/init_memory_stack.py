@@ -45,6 +45,12 @@ DEFAULTS = {
 }
 
 
+BUILD_CMD = ["docker", "compose", "build"]
+START_MEMORY_SERVER_CMD = ["docker", "compose", "up", "-d", "--wait", "memory-server"]
+RUN_MEMORY_AGENT_CMD = ["docker", "compose", "run", "--rm", "--service-ports", "--no-deps", "memory-agent"]
+STOP_MEMORY_SERVER_CMD = ["docker", "compose", "stop", "memory-server"]
+
+
 def _ask(prompt: str, default: str | None = None) -> str:
     label = f"{prompt} [{default}]: " if default is not None else f"{prompt}: "
     try:
@@ -95,7 +101,24 @@ def main() -> int:
             raise SystemExit("leaving existing .env unchanged")
     ENV_PATH.write_text(build_env(collect_values()), encoding="utf-8")
     print(f"Wrote {ENV_PATH}")
-    return subprocess.call(["docker", "compose", "up", "--build", "--abort-on-container-exit"], cwd=REPO_ROOT)
+    print("Building Docker images...")
+    build_result = subprocess.run(BUILD_CMD, cwd=REPO_ROOT, check=False)
+    if build_result.returncode != 0:
+        return build_result.returncode
+
+    print("Starting low-level memory-server detached...")
+    server_result = subprocess.run(START_MEMORY_SERVER_CMD, cwd=REPO_ROOT, check=False)
+    if server_result.returncode != 0:
+        print("Stopping partially started low-level memory-server...")
+        subprocess.run(STOP_MEMORY_SERVER_CMD, cwd=REPO_ROOT, check=False)
+        return server_result.returncode
+
+    print("Starting memory-agent interactively. Answer its OpenCode auth/model prompts below.")
+    try:
+        return subprocess.call(RUN_MEMORY_AGENT_CMD, cwd=REPO_ROOT)
+    finally:
+        print("Stopping detached low-level memory-server...")
+        subprocess.run(STOP_MEMORY_SERVER_CMD, cwd=REPO_ROOT, check=False)
 
 
 if __name__ == "__main__":
