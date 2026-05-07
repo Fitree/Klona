@@ -24,7 +24,6 @@ Use this goal as the basis for judging the recall and store decisions below.
 - Use the configured KLONA high-level MCP tools for **all** memory operations.
 - Call `recall(input: str)` for retrieval. Put the full information gap and relevant task context in `input`.
 - Call `remember(input: str)` for storage. Put the complete candidate memory context in `input`.
-- Do **not** delegate memory work to a local `klona-memory` subagent and do **not** call low-level vault/admin tools during normal user-side work.
 
 ### Session continuity
 

@@ -197,7 +197,7 @@ class ServerSideAssetTests(unittest.TestCase):
         snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
         self.assertIn("recall(input: str)", snippet)
         self.assertIn("remember(input: str)", snippet)
-        self.assertIn("Do **not** delegate memory work to a local `klona-memory` subagent", snippet)
+        self.assertNotIn("Do **not** delegate memory work to a local `klona-memory` subagent", snippet)
 
 
 if __name__ == "__main__":
