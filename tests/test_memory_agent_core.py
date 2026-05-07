@@ -562,6 +562,8 @@ def install_fake_server_dependencies():
 
     class FakeTransportSecuritySettings:
         def __init__(self, **kwargs):
+            if "allowed_hosts" in kwargs and kwargs["allowed_hosts"] is None:
+                raise ValueError("allowed_hosts must be omitted or a list")
             self.kwargs = kwargs
 
     class FakeStarlette:
@@ -607,6 +609,36 @@ class _null_async_context:
 
     async def __aexit__(self, exc_type, exc, tb):
         return False
+
+
+class HighLevelTransportSecurityTests(unittest.TestCase):
+    def import_server_with_env(self, env):
+        with tempfile.TemporaryDirectory() as tempdir:
+            full_env = {"MEMORY_AGENT_QUEUE_DB": str(Path(tempdir) / "queue.sqlite3"), **env}
+            sys.modules.pop("memory_agent.server", None)
+            with mock.patch.dict(sys.modules, install_fake_server_dependencies()):
+                with mock.patch.dict(os.environ, full_env, clear=True):
+                    server = importlib.import_module("memory_agent.server")
+            self.addCleanup(sys.modules.pop, "memory_agent.server", None)
+            return server
+
+    def test_empty_high_level_allowed_hosts_disables_dns_rebinding_without_allowed_hosts(self):
+        server = self.import_server_with_env({"HIGH_LEVEL_ALLOWED_HOSTS": ""})
+
+        self.assertEqual(
+            server.transport_security.kwargs,
+            {"enable_dns_rebinding_protection": False},
+        )
+
+    def test_non_empty_high_level_allowed_hosts_enables_dns_rebinding_with_list(self):
+        server = self.import_server_with_env(
+            {"HIGH_LEVEL_ALLOWED_HOSTS": " high.example, localhost:8080 ", "MEMORY_AGENT_ALLOWED_HOSTS": "legacy.example"}
+        )
+
+        self.assertEqual(
+            server.transport_security.kwargs,
+            {"enable_dns_rebinding_protection": True, "allowed_hosts": ["high.example", "localhost:8080"]},
+        )
 
 
 class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):

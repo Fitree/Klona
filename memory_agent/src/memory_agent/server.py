@@ -21,10 +21,13 @@ from .queue import MemoryQueue
 logger = logging.getLogger(__name__)
 settings = load_settings()
 
-transport_security = TransportSecuritySettings(
-    enable_dns_rebinding_protection=bool(settings.allowed_hosts),
-    allowed_hosts=list(settings.allowed_hosts) if settings.allowed_hosts else None,
-)
+if settings.allowed_hosts:
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=list(settings.allowed_hosts),
+    )
+else:
+    transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
 
 mcp = FastMCP(
     MCP_SERVER_NAME,
