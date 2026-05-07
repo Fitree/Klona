@@ -11,7 +11,6 @@ class OpenCodePluginTests(unittest.TestCase):
 
         self.assertIn("export const KlonaMemoryMentalModelInjectorPlugin", plugin)
         self.assertIn('"klona-memory-mental-model-injector"', plugin)
-        self.assertIn('name: "klona-memory-mental-model-injector-plugin"', plugin)
         self.assertIn('plugin: "klona-memory-mental-model-injector"', plugin)
         self.assertNotIn("KlonaMemorySessionPlugin", plugin)
         self.assertNotIn('service: "klona-memory-session"', plugin)
@@ -32,22 +31,27 @@ class OpenCodePluginTests(unittest.TestCase):
         self.assertNotIn("KLONA_MEMORY_MENTAL_MODEL_INJECTION_AGENT", plugin)
         self.assertNotIn("agent.trim() ===", plugin)
 
-    def test_plugin_uses_high_level_recall_mcp(self):
+    def test_plugin_uses_private_high_level_mental_model_endpoint(self):
         plugin = installer.PLUGIN_SOURCE.read_text()
 
         self.assertIn('const DEFAULT_MCP_NAME = "klona_memory"', plugin)
         self.assertIn('const DEFAULT_MCP_TIMEOUT_MS = 600_000', plugin)
         self.assertIn('timeout: typeof mcp.timeout === "number" ? mcp.timeout : DEFAULT_MCP_TIMEOUT_MS', plugin)
-        self.assertIn('name: "recall"', plugin)
-        self.assertIn('input: `Return the exact current content of ${KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH}', plugin)
+        self.assertIn('const INTERNAL_MENTAL_MODEL_PATH = "/internal/mental-model"', plugin)
+        self.assertIn('function mentalModelEndpointUrl(mcpUrl)', plugin)
+        self.assertIn('method: "GET"', plugin)
+        self.assertIn('Accept: "application/json"', plugin)
+        self.assertNotIn('name: "recall"', plugin)
+        self.assertNotIn('tools/call', plugin)
         self.assertNotIn('name: "vault_read"', plugin)
 
-    def test_plugin_extracts_high_level_recall_result_shapes(self):
+    def test_plugin_marks_missing_or_empty_mental_model_as_checked(self):
         plugin = installer.PLUGIN_SOURCE.read_text()
 
-        self.assertIn('if (typeof value.result === "string") return value.result.trim()', plugin)
-        self.assertIn('const direct = extract(result?.structuredContent) || extract(result?.result) || extract(result?.content)', plugin)
-        self.assertIn('const parsedContent = extract(parsed)', plugin)
+        self.assertIn('if (response.status === 404 && payload?.status === "missing") return payload', plugin)
+        self.assertIn('const memoryResult = await readKlonaMemoryMentalModel()', plugin)
+        self.assertIn('await writeInjectionStatus(sessionID, { should_inject: false })', plugin)
+        self.assertIn('status: memoryResult.status', plugin)
 
     def test_plugin_observes_compaction_and_marks_next_root_message_for_injection(self):
         plugin = installer.PLUGIN_SOURCE.read_text()

@@ -549,6 +549,175 @@ class OpenCodeClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("model", payload)
 
 
+class MentalModelClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_low_level_client_initializes_notifies_and_extracts_exact_content(self):
+        from memory_agent.config import Settings
+        from memory_agent.mental_model import LowLevelMcpMentalModelClient, MENTAL_MODEL_PATH, MENTAL_MODEL_TOOL_NAME
+
+        class FakeAsyncClient:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        client = LowLevelMcpMentalModelClient(
+            Settings(low_level_mcp_url="http://low.example/mcp", low_level_mcp_auth_token="low-secret", recall_timeout_seconds=12)
+        )
+        calls = []
+
+        async def fake_post(http_client, headers, body, session_id=None):
+            calls.append((headers, body, session_id))
+            if body["method"] == "initialize":
+                return ({"result": {}}, "session-1")
+            if body["method"] == "notifications/initialized":
+                return (None, "session-1")
+            return ({"result": {"structuredContent": {"path": MENTAL_MODEL_PATH, "content": "# Exact\n\n  keep spaces\n"}}}, "session-1")
+
+        with mock.patch.dict(sys.modules, {"httpx": types.SimpleNamespace(AsyncClient=FakeAsyncClient)}), mock.patch.object(
+            client, "_post", side_effect=fake_post
+        ):
+            content = await client.read()
+
+        self.assertEqual(content, "# Exact\n\n  keep spaces\n")
+        self.assertEqual(calls[0][0]["Authorization"], "Bearer low-secret")
+        self.assertEqual(calls[0][1]["method"], "initialize")
+        self.assertEqual(calls[1][1]["method"], "notifications/initialized")
+        self.assertEqual(calls[1][2], "session-1")
+        self.assertEqual(MENTAL_MODEL_TOOL_NAME, "vault_read")
+        self.assertEqual(calls[2][1]["params"], {"name": MENTAL_MODEL_TOOL_NAME, "arguments": {"path": MENTAL_MODEL_PATH}})
+
+    async def test_low_level_client_falls_back_to_opencode_composed_tool_name_only_after_unknown_tool(self):
+        from memory_agent.config import Settings
+        from memory_agent.mental_model import LowLevelMcpMentalModelClient, MENTAL_MODEL_TOOL_FALLBACK_NAME
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        client = LowLevelMcpMentalModelClient(Settings(low_level_mcp_url="http://low.example/mcp"))
+        tool_names = []
+
+        async def fake_post(http_client, headers, body, session_id=None):
+            if body["method"] == "initialize":
+                return ({"result": {}}, "session-1")
+            if body["method"] == "notifications/initialized":
+                return (None, "session-1")
+            tool_names.append(body["params"]["name"])
+            if len(tool_names) == 1:
+                return ({"error": {"message": "Unknown tool"}}, "session-1")
+            return ({"result": {"structuredContent": {"content": "fallback content"}}}, "session-1")
+
+        with mock.patch.dict(sys.modules, {"httpx": types.SimpleNamespace(AsyncClient=lambda **kwargs: FakeAsyncClient())}), mock.patch.object(
+            client, "_post", side_effect=fake_post
+        ):
+            content = await client.read()
+
+        self.assertEqual(content, "fallback content")
+        self.assertEqual(tool_names, ["vault_read", MENTAL_MODEL_TOOL_FALLBACK_NAME])
+
+    async def test_low_level_client_maps_file_not_found_to_missing(self):
+        from memory_agent.config import Settings
+        from memory_agent.mental_model import LowLevelMcpMentalModelClient, MentalModelMissingError
+
+        client = LowLevelMcpMentalModelClient(Settings(low_level_mcp_url="http://low.example/mcp"))
+
+        async def fake_post(http_client, headers, body, session_id=None):
+            if body["method"] == "initialize":
+                return ({"result": {}}, "session-1")
+            if body["method"] == "notifications/initialized":
+                return (None, "session-1")
+            return ({"result": {"structuredContent": {"error": "file_not_found", "message": "File not found"}}}, "session-1")
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        with mock.patch.dict(sys.modules, {"httpx": types.SimpleNamespace(AsyncClient=lambda **kwargs: FakeAsyncClient())}), mock.patch.object(
+            client, "_post", side_effect=fake_post
+        ):
+            with self.assertRaises(MentalModelMissingError):
+                await client.read()
+
+    async def test_low_level_client_errors_when_content_is_absent(self):
+        from memory_agent.config import Settings
+        from memory_agent.mental_model import LowLevelMcpMentalModelClient
+
+        client = LowLevelMcpMentalModelClient(Settings(low_level_mcp_url="http://low.example/mcp"))
+
+        async def fake_post(http_client, headers, body, session_id=None):
+            if body["method"] == "initialize":
+                return ({"result": {}}, "session-1")
+            if body["method"] == "notifications/initialized":
+                return (None, "session-1")
+            return ({"result": {"structuredContent": {"path": "/KLONA_MEMORY_MENTAL_MODEL.md"}}}, "session-1")
+
+        class FakeAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        with mock.patch.dict(sys.modules, {"httpx": types.SimpleNamespace(AsyncClient=lambda **kwargs: FakeAsyncClient())}), mock.patch.object(
+            client, "_post", side_effect=fake_post
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not contain content"):
+                await client.read()
+
+    async def test_sse_parser_handles_crlf_separated_multiple_events(self):
+        from memory_agent.mental_model import _parse_mcp_response
+
+        class FakeSSEParseResponse:
+            headers = {"content-type": "text/event-stream"}
+            text = (
+                'event: notification\r\n'
+                'data: {"jsonrpc":"2.0","method":"notifications/progress"}\r\n'
+                '\r\n'
+                ': keepalive\r\n'
+                '\r\n'
+                'event: message\r\n'
+                'data: {"jsonrpc":"2.0","id":2,"result":{"structuredContent":{"content":"exact"}}}\r\n'
+                '\r\n'
+            )
+
+            def raise_for_status(self):
+                return None
+
+        parsed = await _parse_mcp_response(FakeSSEParseResponse())
+
+        self.assertEqual(parsed["id"], 2)
+        self.assertEqual(parsed["result"]["structuredContent"]["content"], "exact")
+
+    async def test_sse_parser_handles_lf_separated_multiple_events(self):
+        from memory_agent.mental_model import _parse_mcp_response
+
+        class FakeSSEParseResponse:
+            headers = {"content-type": "text/event-stream"}
+            text = (
+                'data: {"jsonrpc":"2.0","method":"notifications/progress"}\n'
+                '\n'
+                'data: {"jsonrpc":"2.0","id":2,"result":{"structuredContent":{"content":"exact"}}}\n'
+                '\n'
+            )
+
+            def raise_for_status(self):
+                return None
+
+        parsed = await _parse_mcp_response(FakeSSEParseResponse())
+
+        self.assertEqual(parsed["id"], 2)
+
+
 def install_fake_server_dependencies():
     class FakeFastMCP:
         def __init__(self, *args, **kwargs):
@@ -713,6 +882,42 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.server._is_authorized("", "high-secret"))
         self.assertFalse(self.server._is_authorized("Bearer wrong", "high-secret"))
         self.assertTrue(self.server._is_authorized("Bearer high-secret", "high-secret"))
+
+    async def test_private_mental_model_endpoint_returns_exact_content(self):
+        class FakeClient:
+            def __init__(self, settings):
+                self.settings = settings
+
+            async def read(self):
+                return "# Model\n\nexact"
+
+        with mock.patch.object(self.server, "LowLevelMcpMentalModelClient", FakeClient):
+            response = await self.server.internal_mental_model(None)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.body, {"status": "ok", "content": "# Model\n\nexact"})
+
+    async def test_private_mental_model_endpoint_maps_missing(self):
+        class FakeClient:
+            def __init__(self, settings):
+                self.settings = settings
+
+            async def read(self):
+                raise self_server.MentalModelMissingError()
+
+        self_server = self.server
+        with mock.patch.object(self.server, "LowLevelMcpMentalModelClient", FakeClient):
+            response = await self.server.internal_mental_model(None)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.body, {"status": "missing", "content": ""})
+
+    async def test_private_mental_model_endpoint_errors_are_not_mcp_tools(self):
+        route_paths = [route[1][0] for route in self.server.app.kwargs["routes"] if route[0] == "route"]
+        tool_names = [getattr(value, "__name__", "") for value in vars(self.server).values()]
+
+        self.assertIn("/internal/mental-model", route_paths)
+        self.assertNotIn("mental_model", tool_names)
 
 
 class LowLevelServerAuthTests(unittest.TestCase):

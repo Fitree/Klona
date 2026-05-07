@@ -89,7 +89,7 @@ Klona has a few small pieces that work together:
 2. **Low-level MCP memory server**: `memory_server/` exposes the vault through direct/admin MCP tools for tree/list/read/write/update/delete/move/search/backlinks operations. It is the only container with the vault mount.
 3. **High-level memory-agent**: `memory_agent/` exposes `recall(input)` and `remember(input)` for user-side agents. `recall` waits for the server-side memory agent to retrieve context; `remember` acknowledges after queue insert and is processed asynchronously.
 4. **OpenCode integration**: The installer adds Klona-managed OpenCode files and MCP configuration under `~/.config/opencode`, pointing normal agents at the high-level MCP endpoint.
-5. **`KLONA_MEMORY_MENTAL_MODEL.md` injection**: The OpenCode plugin reads `/KLONA_MEMORY_MENTAL_MODEL.md` through the configured MCP server and prepends it to the first user message of a root OpenCode session. It also marks sessions for reinjection after compaction.
+5. **`KLONA_MEMORY_MENTAL_MODEL.md` injection**: The OpenCode plugin calls a private high-level memory-agent HTTP endpoint that exact-reads `/KLONA_MEMORY_MENTAL_MODEL.md` through the low-level MCP server, then prepends it to the first user message of a root OpenCode session. This endpoint is not exposed as a user-visible MCP tool; the plugin also marks sessions for reinjection after compaction.
 
 The result is a memory loop where user-side agents use simple recall/remember tools while the server-side memory-agent owns vault navigation, storage gating, duplicate checks, and working continuity.
 

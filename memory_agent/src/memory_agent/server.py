@@ -16,6 +16,7 @@ from starlette.routing import Mount, Route
 
 from .config import load_settings
 from .constants import MCP_HEALTH_SERVER_NAME, MCP_SERVER_NAME
+from .mental_model import LowLevelMcpMentalModelClient, MentalModelMissingError
 from .queue import MemoryQueue
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,18 @@ async def health(request: Request) -> Response:
     return JSONResponse({"status": "ok", "server": MCP_HEALTH_SERVER_NAME, "version": "0.1.0"})
 
 
+async def internal_mental_model(request: Request) -> Response:
+    """Return exact mental-model markdown through a private non-MCP route."""
+    try:
+        content = await LowLevelMcpMentalModelClient(settings).read()
+    except MentalModelMissingError:
+        return JSONResponse({"status": "missing", "content": ""}, status_code=404)
+    except Exception as error:
+        logger.warning("Failed to exact-read KLONA_MEMORY_MENTAL_MODEL.md", exc_info=True)
+        return JSONResponse({"status": "error", "error": str(error)}, status_code=502)
+    return JSONResponse({"status": "ok", "content": content})
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
     async with mcp.session_manager.run():
@@ -114,7 +127,7 @@ async def lifespan(app: Starlette):
 
 
 app = Starlette(
-    routes=[Route("/health", health), Mount("/", app=mcp.streamable_http_app())],
+    routes=[Route("/health", health), Route("/internal/mental-model", internal_mental_model), Mount("/", app=mcp.streamable_http_app())],
     lifespan=lifespan,
     middleware=[Middleware(AuthMiddleware)],
 )
