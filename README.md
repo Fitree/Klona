@@ -12,7 +12,7 @@ In Swedish, **klona** means "to clone." The spirit of this project is to help ag
 
 The recommended setup runs two MCP services with Docker Compose:
 
-- `memory-server`: the low-level direct/admin MCP endpoint for vault tools. This is the only service that mounts `HOST_VAULT_DIR`.
+- `memory-server`: the low-level direct/admin MCP endpoint for vault tools. This is internal-only on the Docker Compose network by default and is the only service that mounts `HOST_VAULT_DIR`.
 - `memory-agent`: the high-level user-agent MCP endpoint exposing `recall(input: str)` and `remember(input: str)`. It stores only queue/state in a named Docker volume and never mounts the vault.
 
 Requirement: Docker with Docker Compose v2.
@@ -23,7 +23,7 @@ Start the stack interactively from this repository:
 python3 scripts/init_memory_stack.py
 ```
 
-The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. MCP bearer-token prompts default to empty; an empty token disables auth for that MCP endpoint, while a non-empty token requires `Authorization: Bearer <token>`. Allowed-host prompts also default to empty, which disables DNS rebinding protection and allows all Host headers; set comma-separated allowed-host lists manually if you want Host header checks. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
+The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin and off the host network while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. High-level MCP bearer-token prompts default to empty; an empty token disables auth for that endpoint, while a non-empty token requires `Authorization: Bearer <token>`. The high-level allowed-host prompt also defaults to empty, which disables DNS rebinding protection and allows all Host headers; set a comma-separated allowed-host list if you want Host header checks. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
 
 After the high-level memory-agent health endpoint is reachable, the init script automatically sends Docker's detach sequence and exits successfully while leaving the same `memory-agent` container running. If setup, build, startup, or the foreground memory-agent exits before that healthy detach point, the init script stops the detached `memory-server` container as cleanup.
 
@@ -38,18 +38,16 @@ If you need to inspect or stop only the one-off memory-agent container, use `doc
 Verify the services are running:
 
 ```bash
-curl http://localhost:32310/health  # low-level memory-server
 curl http://localhost:32311/health  # high-level memory-agent
 ```
 
-Default MCP endpoints:
+Default user-facing MCP endpoint:
 
 ```text
-http://localhost:32310/mcp  low-level direct/admin vault tools
 http://localhost:32311/mcp  high-level user-agent recall/remember tools
 ```
 
-Use the high-level endpoint for normal agents. Keep the low-level endpoint for trusted admin/direct clients only.
+Use the high-level endpoint for normal agents. In the full Compose stack, the low-level endpoint is reachable only inside the Docker network at `http://memory-server:8000/mcp` for internal `memory-agent` communication.
 
 See [`memory_server/README.md`](memory_server/README.md) for standalone low-level server configuration, vault format, MCP tools, and public safety notes.
 
@@ -95,8 +93,8 @@ The result is a memory loop where user-side agents use simple recall/remember to
 
 ### Auth and model flow
 
-- Low-level and high-level MCP endpoints use separate bearer tokens and allowed-host settings. Empty tokens disable auth for the corresponding endpoint; non-empty tokens require exact Bearer auth. Empty allowed-host settings allow all Host headers; non-empty comma-separated lists enable DNS rebinding protection.
-- The memory-agent receives the low-level URL/token over the internal Compose network.
+- The high-level MCP endpoint supports a bearer token and allowed-host settings. Empty tokens disable auth for that endpoint; non-empty tokens require exact Bearer auth. Empty allowed-host settings allow all Host headers; non-empty comma-separated lists enable DNS rebinding protection.
+- The low-level MCP server is not published to the host in the full stack. The memory-agent receives its fixed internal URL over the Compose network.
 - During first attached startup, the memory-agent container asks whether to run `opencode auth login`. If auth fails, it asks whether to retry, proceed without auth, or terminate.
 - After auth/proceed, the container discovers available OpenCode models and asks for model and reasoning-effort choices inside the final runtime container.
 

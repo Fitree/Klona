@@ -1,14 +1,11 @@
 services:
   memory-server:
     build: ./memory_server
-    ports:
-      - "${LOW_LEVEL_MCP_HOST_PORT:-32310}:8000"
     volumes:
       - ${HOST_VAULT_DIR:?set HOST_VAULT_DIR in .env}:/vault
     environment:
       VAULT_DIR: /vault
       AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}
-      ALLOWED_HOSTS: ${LOW_LEVEL_ALLOWED_HOSTS-}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -26,7 +23,7 @@ services:
     environment:
       HIGH_LEVEL_MCP_AUTH_TOKEN: ${HIGH_LEVEL_MCP_AUTH_TOKEN:-}
       HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS-}
-      LOW_LEVEL_MCP_URL: ${LOW_LEVEL_MCP_URL:-http://memory-server:8000/mcp}
+      LOW_LEVEL_MCP_URL: http://memory-server:8000/mcp
       LOW_LEVEL_MCP_AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}
       MEMORY_AGENT_QUEUE_DB: ${MEMORY_AGENT_QUEUE_DB:-/state/queue.db}
       MEMORY_AGENT_STATE_DIR: ${MEMORY_AGENT_STATE_DIR:-/state}

@@ -2,7 +2,7 @@
 
 A remote MCP server that exposes a markdown knowledge base as a mounted filesystem. Navigate it with vault tools for tree, listing, reading, writing, updating, deleting, moving, directory creation, search, and backlinks.
 
-This is the low-level direct/admin server. In the full server-side KLONA stack, normal user-side agents should connect to the high-level `memory-agent` endpoint instead of this vault endpoint.
+This is the low-level direct/admin server. In the full server-side KLONA stack, it is internal-only on the Docker Compose network by default; normal user-side agents should connect to the high-level `memory-agent` endpoint instead of this vault endpoint.
 
 This directory is self-contained. Run memory server commands from `KLONA/memory_server/`.
 
@@ -32,17 +32,13 @@ Verify:
 curl http://localhost:32310/health
 ```
 
-### 3. Connect from OpenCode
+### 3. Connect a trusted direct/admin MCP client
 
-From the repository root, run:
+The standalone low-level server is for trusted admin/direct MCP clients that intentionally use the vault tools listed below. Configure those clients manually for the low-level MCP endpoint and bearer token from `.env`; leave the client token empty if `AUTH_TOKEN` is empty.
 
-```bash
-python install_agent.py --platform opencode
-```
+Do not use the normal root KLONA OpenCode installer for this standalone endpoint. That installer configures the full-stack high-level KLONA integration, where agents call `recall(input: str)` and `remember(input: str)` through `memory-agent` instead of direct vault/admin tools.
 
-When prompted, enter the memory MCP URL and the bearer token from `.env`; leave the token empty if `AUTH_TOKEN` is empty.
-
-For local Docker Compose usage, the MCP URL is usually:
+For standalone local Docker Compose usage, the low-level MCP URL is usually:
 
 ```text
 http://localhost:32310/mcp
@@ -106,7 +102,7 @@ Content here. Link to related notes with [[wikilinks]].
 
 ## Full server-side stack
 
-From the repository root, use `python3 scripts/init_memory_stack.py` or copy `.env.example` to `.env` and run `docker compose up --build`. The root Compose file runs this service as `memory-server` and a separate high-level `memory-agent` service. Only `memory-server` mounts `HOST_VAULT_DIR`; `memory-agent` persists only queue/state in a named Docker volume.
+From the repository root, use `python3 scripts/init_memory_stack.py` or copy `.env.example` to `.env` and run `docker compose up --build`. The root Compose file runs this service as `memory-server` and a separate high-level `memory-agent` service. Only `memory-server` mounts `HOST_VAULT_DIR`; `memory-agent` persists only queue/state in a named Docker volume. The root Compose stack does not publish this low-level service to the host; `memory-agent` reaches it internally at `http://memory-server:8000/mcp`.
 
 ## Public safety
 

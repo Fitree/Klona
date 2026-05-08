@@ -51,32 +51,42 @@ class ServerSideAssetTests(unittest.TestCase):
         env = (ROOT / ".env.example").read_text()
         for name in [
             "HOST_VAULT_DIR",
-            "LOW_LEVEL_MCP_HOST_PORT",
-            "LOW_LEVEL_MCP_AUTH_TOKEN",
-            "LOW_LEVEL_ALLOWED_HOSTS",
             "HIGH_LEVEL_MCP_HOST_PORT",
             "HIGH_LEVEL_MCP_AUTH_TOKEN",
             "HIGH_LEVEL_ALLOWED_HOSTS",
-            "LOW_LEVEL_MCP_URL",
             "MEMORY_AGENT_QUEUE_DB",
             "MEMORY_AGENT_STATE_DIR",
             "MEMORY_AGENT_TIMEOUT_SECONDS",
             "MEMORY_AGENT_MAX_RETRIES",
         ]:
             self.assertIn(f"{name}=", env)
-        self.assertIn("LOW_LEVEL_ALLOWED_HOSTS=\n", env)
+        self.assertNotIn("LOW_LEVEL_MCP_HOST_PORT", env)
+        self.assertNotIn("LOW_LEVEL_MCP_AUTH_TOKEN", env)
+        self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", env)
+        self.assertNotIn("LOW_LEVEL_MCP_URL", env)
         self.assertIn("HIGH_LEVEL_ALLOWED_HOSTS=\n", env)
         self.assertIn("Empty disables DNS rebinding protection and allows all Host headers", env)
-        self.assertIn("LOW_LEVEL_MCP_AUTH_TOKEN=\n", env)
         self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
         self.assertIn("Empty disables auth", env)
 
     def test_compose_passes_empty_allowed_hosts_without_non_empty_fallbacks(self):
         compose = (ROOT / "docker-compose.yml").read_text()
-        self.assertIn("ALLOWED_HOSTS: ${LOW_LEVEL_ALLOWED_HOSTS-}", compose)
         self.assertIn("HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS-}", compose)
+        self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", compose)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS:-localhost", compose)
         self.assertNotIn("HIGH_LEVEL_ALLOWED_HOSTS:-localhost", compose)
+
+    def test_compose_keeps_low_level_server_internal_only(self):
+        compose = (ROOT / "docker-compose.yml").read_text()
+        memory_server_section = compose.split("  memory-server:", 1)[1].split("\n\n  memory-agent:", 1)[0]
+        memory_agent_section = compose.split("  memory-agent:", 1)[1]
+        self.assertNotIn("ports:", memory_server_section)
+        self.assertNotIn("LOW_LEVEL_MCP_HOST_PORT", compose)
+        self.assertIn("AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}", memory_server_section)
+        self.assertIn("LOW_LEVEL_MCP_AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}", memory_agent_section)
+        self.assertIn("LOW_LEVEL_MCP_URL: http://memory-server:8000/mcp", memory_agent_section)
+        self.assertNotIn("LOW_LEVEL_MCP_AUTH_TOKEN", (ROOT / ".env.example").read_text())
+        self.assertNotIn("LOW_LEVEL_MCP_URL:", (ROOT / ".env.example").read_text())
 
     def test_init_script_is_parseable_and_runs_two_phase_interactive_start(self):
         script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
@@ -95,12 +105,14 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn('"--abort-on-container-exit"', script)
         self.assertNotIn("OPENCODE_MODEL", script)
         self.assertNotIn("OPENCODE_REASONING_EFFORT", script)
-        self.assertIn('"LOW_LEVEL_ALLOWED_HOSTS": ""', script)
+        self.assertNotIn("LOW_LEVEL_MCP_HOST_PORT", script)
+        self.assertNotIn("LOW_LEVEL_MCP_AUTH_TOKEN", script)
+        self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", script)
+        self.assertNotIn("LOW_LEVEL_MCP_URL", script)
         self.assertIn('"HIGH_LEVEL_ALLOWED_HOSTS": ""', script)
         self.assertIn("empty allows all Host headers", script)
         self.assertNotIn("secrets", script)
         self.assertNotIn("token_urlsafe", script)
-        self.assertIn('"LOW_LEVEL_MCP_AUTH_TOKEN": ""', script)
         self.assertIn('"HIGH_LEVEL_MCP_AUTH_TOKEN": ""', script)
         self.assertIn("empty disables auth", script)
 
@@ -192,6 +204,14 @@ class ServerSideAssetTests(unittest.TestCase):
         pyproject = (ROOT / "memory_agent" / "pyproject.toml").read_text()
         self.assertIn('[tool.hatch.build.targets.wheel]', pyproject)
         self.assertIn('packages = ["src/memory_agent"]', pyproject)
+
+    def test_low_level_readme_does_not_point_normal_installer_at_admin_endpoint(self):
+        readme = (ROOT / "memory_server" / "README.md").read_text()
+        self.assertNotIn("python install_agent.py --platform opencode", readme)
+        self.assertIn("trusted admin/direct MCP clients", readme)
+        self.assertIn("Configure those clients manually", readme)
+        self.assertIn("recall(input: str)", readme)
+        self.assertIn("remember(input: str)", readme)
 
     def test_opencode_snippet_uses_high_level_tools_not_local_subagent(self):
         snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
