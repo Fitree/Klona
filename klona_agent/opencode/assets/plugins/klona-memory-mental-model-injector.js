@@ -156,9 +156,64 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     )
   }
 
+  async function getSessionMessageHistoryStatus(sessionID) {
+    try {
+      const response = await client.session.messages({
+        path: { id: sessionID },
+        query: { limit: 1 },
+      })
+
+      if (response?.error) {
+        await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session messages lookup returned an error", {
+          sessionID,
+          error: response.error?.message ?? String(response.error),
+        })
+        return { hasExistingMessages: true, reason: "message-history-unverified" }
+      }
+
+      const messages = response?.data ?? response
+      if (!Array.isArray(messages)) {
+        await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session messages lookup returned an unexpected shape", {
+          sessionID,
+        })
+        return { hasExistingMessages: true, reason: "message-history-unverified" }
+      }
+
+      return {
+        hasExistingMessages: messages.length > 0,
+        reason: messages.length > 0 ? "resumed-existing-session" : "new-empty-session",
+      }
+    } catch (error) {
+      await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session messages lookup failed", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return { hasExistingMessages: true, reason: "message-history-unverified" }
+    }
+  }
+
   async function ensureInjectionStatus(sessionID) {
     const status = await readInjectionStatus(sessionID)
-    if (status) return status
+    if (status) {
+      if (status.should_inject === true && status.reason === "first-user-message") {
+        const messageHistoryStatus = await getSessionMessageHistoryStatus(sessionID)
+        if (messageHistoryStatus.hasExistingMessages) {
+          await writeInjectionStatus(sessionID, {
+            should_inject: false,
+            reason: `stale-first-user-message-${messageHistoryStatus.reason}`,
+          })
+          return null
+        }
+      }
+
+      return status
+    }
+
+    const messageHistoryStatus = await getSessionMessageHistoryStatus(sessionID)
+    if (messageHistoryStatus.hasExistingMessages) {
+      await writeInjectionStatus(sessionID, { should_inject: false, reason: messageHistoryStatus.reason })
+      return null
+    }
 
     const initialStatus = { should_inject: true, reason: "first-user-message" }
     await writeInjectionStatus(sessionID, initialStatus)
@@ -244,13 +299,15 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
 
       try {
         const status = await ensureInjectionStatus(sessionID)
+        if (!status) return
         if (status.should_inject === false) return
+
+        await writeInjectionStatus(sessionID, { should_inject: false, reason: `${status.reason}-consumed` })
 
         const memoryResult = await readKlonaMemoryMentalModel()
         const memoryContent = memoryResult.content
 
         if (!memoryContent) {
-          await writeInjectionStatus(sessionID, { should_inject: false })
           if (!loggedSessions.has(sessionID)) {
             loggedSessions.add(sessionID)
             await log("debug", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because the file is missing or empty", {
@@ -265,8 +322,6 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
 
         injected = prependKlonaMemoryMentalModelToFirstTextPart(output, memoryContent)
         if (!injected) return
-
-        await writeInjectionStatus(sessionID, { should_inject: false })
 
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
