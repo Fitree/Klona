@@ -56,9 +56,7 @@ def _opencode_base_url() -> str:
     explicit_base_url = os.environ.get("OPENCODE_BASE_URL")
     if explicit_base_url:
         return explicit_base_url.rstrip("/")
-    host = os.environ.get("OPENCODE_HOST") or DEFAULT_OPENCODE_HOST
-    port = os.environ.get("OPENCODE_PORT") or str(DEFAULT_OPENCODE_PORT)
-    return f"http://{host}:{port}"
+    return f"http://{DEFAULT_OPENCODE_HOST}:{DEFAULT_OPENCODE_PORT}"
 
 
 @dataclass(frozen=True)

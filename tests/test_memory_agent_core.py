@@ -175,21 +175,37 @@ class OpenCodeConfigTests(unittest.TestCase):
 
         self.assertEqual(settings.queue_db_path, Path(DEFAULT_QUEUE_DB_PATH))
 
-    def test_opencode_base_url_defaults_derive_from_host_and_port(self):
+    def test_opencode_base_url_uses_fixed_internal_default(self):
         from memory_agent.config import Settings
 
         with mock.patch.dict(os.environ, {"OPENCODE_HOST": "0.0.0.0", "OPENCODE_PORT": "5099"}, clear=True):
             settings = Settings()
 
-        self.assertEqual(settings.opencode_base_url, "http://0.0.0.0:5099")
+        self.assertEqual(settings.opencode_base_url, "http://127.0.0.1:4096")
 
-    def test_explicit_empty_opencode_base_url_uses_host_port_defaults(self):
+    def test_explicit_empty_opencode_base_url_uses_fixed_internal_default(self):
         from memory_agent.config import Settings
 
         with mock.patch.dict(os.environ, {"OPENCODE_BASE_URL": "", "OPENCODE_HOST": "", "OPENCODE_PORT": ""}, clear=True):
             settings = Settings()
 
         self.assertEqual(settings.opencode_base_url, "http://127.0.0.1:4096")
+
+    def test_start_opencode_serve_uses_fixed_internal_listener(self):
+        from memory_agent import runtime
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            config_path = Path(tempdir) / "opencode" / "opencode.json"
+            with mock.patch.dict(os.environ, {"OPENCODE_HOST": "0.0.0.0", "OPENCODE_PORT": "5099"}, clear=True), mock.patch(
+                "subprocess.Popen"
+            ) as popen_mock:
+                runtime.start_opencode_serve(config_path)
+
+        args = popen_mock.call_args.args[0]
+        env = popen_mock.call_args.kwargs["env"]
+        self.assertEqual(args, ["opencode", "serve", "--hostname", "127.0.0.1", "--port", "4096"])
+        self.assertNotIn("OPENCODE_HOST", env)
+        self.assertNotIn("OPENCODE_PORT", env)
 
     def test_explicit_opencode_base_url_still_takes_precedence(self):
         from memory_agent.config import Settings

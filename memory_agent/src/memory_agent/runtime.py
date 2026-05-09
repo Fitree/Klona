@@ -224,6 +224,8 @@ def opencode_config_environment(config_path: Path) -> dict[str, str]:
     honor it, but XDG_CONFIG_HOME is the primary loading mechanism here.
     """
     env = os.environ.copy()
+    env.pop("OPENCODE_HOST", None)
+    env.pop("OPENCODE_PORT", None)
     env["OPENCODE_CONFIG"] = str(config_path)
     if config_path.name == "opencode.json" and config_path.parent.name == "opencode":
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -237,7 +239,7 @@ def opencode_config_environment(config_path: Path) -> dict[str, str]:
 
 def start_opencode_serve(config_path: Path, port: int = DEFAULT_OPENCODE_PORT) -> subprocess.Popen:
     env = opencode_config_environment(config_path)
-    return subprocess.Popen(["opencode", "serve", "--hostname", os.environ.get("OPENCODE_HOST", DEFAULT_OPENCODE_HOST), "--port", str(port)], env=env)
+    return subprocess.Popen(["opencode", "serve", "--hostname", DEFAULT_OPENCODE_HOST, "--port", str(port)], env=env)
 
 
 def start_process(args: Sequence[str]) -> subprocess.Popen:
@@ -266,7 +268,7 @@ def main() -> None:
     os.environ["MEMORY_AGENT_MODEL"] = model
     os.environ["MEMORY_AGENT_REASONING_EFFORT"] = reasoning
     config_path = generate_opencode_config(settings, model, reasoning)
-    opencode_proc = start_opencode_serve(config_path, int(os.environ.get("OPENCODE_PORT", str(DEFAULT_OPENCODE_PORT))))
+    opencode_proc = start_opencode_serve(config_path)
     server_proc = start_process([sys.executable, "-m", "uvicorn", "memory_agent.server:app", "--host", "0.0.0.0", "--port", "8080"])
     worker_proc = start_process([sys.executable, "-m", "memory_agent.worker"])
     raise SystemExit(supervise([opencode_proc, server_proc, worker_proc]))
