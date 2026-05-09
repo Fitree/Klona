@@ -55,7 +55,6 @@ class ServerSideAssetTests(unittest.TestCase):
             "HIGH_LEVEL_MCP_AUTH_TOKEN",
             "HIGH_LEVEL_ALLOWED_HOSTS",
             "MEMORY_AGENT_QUEUE_DB",
-            "MEMORY_AGENT_STATE_DIR",
             "MEMORY_AGENT_TIMEOUT_SECONDS",
             "MEMORY_AGENT_MAX_RETRIES",
         ]:
@@ -64,6 +63,7 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("LOW_LEVEL_MCP_AUTH_TOKEN", env)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", env)
         self.assertNotIn("LOW_LEVEL_MCP_URL", env)
+        self.assertNotIn("MEMORY_AGENT_STATE_DIR", env)
         self.assertIn("HIGH_LEVEL_ALLOWED_HOSTS=\n", env)
         self.assertIn("Empty disables DNS rebinding protection and allows all Host headers", env)
         self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
@@ -78,6 +78,7 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", compose)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS:-localhost", compose)
         self.assertNotIn("HIGH_LEVEL_ALLOWED_HOSTS:-localhost", compose)
+        self.assertNotIn("MEMORY_AGENT_STATE_DIR", compose)
 
     def test_compose_keeps_low_level_server_internal_only(self):
         compose = (ROOT / "docker-compose.yml").read_text()
@@ -145,7 +146,7 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertEqual(values["HIGH_LEVEL_MCP_AUTH_TOKEN"], "token")
         self.assertEqual(values["HIGH_LEVEL_ALLOWED_HOSTS"], "localhost,127.0.0.1")
         self.assertEqual(values["MEMORY_AGENT_QUEUE_DB"], "/state/queue.db")
-        self.assertEqual(values["MEMORY_AGENT_STATE_DIR"], "/state")
+        self.assertNotIn("MEMORY_AGENT_STATE_DIR", values)
         self.assertEqual(values["MEMORY_AGENT_TIMEOUT_SECONDS"], "600")
         self.assertEqual(values["MEMORY_AGENT_MAX_RETRIES"], "2")
         self.assertEqual(values["OPENCODE_HOST"], "127.0.0.1")
