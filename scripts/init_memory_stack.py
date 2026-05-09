@@ -35,7 +35,7 @@ ENV_ORDER = (
 
 DEFAULTS = {
     "HOST_VAULT_DIR": "./vault",
-    "HIGH_LEVEL_MCP_HOST_PORT": "32311",
+    "HIGH_LEVEL_MCP_HOST_PORT": "32310",
     "HIGH_LEVEL_MCP_AUTH_TOKEN": "",
     "HIGH_LEVEL_ALLOWED_HOSTS": "",
     "MEMORY_AGENT_QUEUE_DB": "/state/queue.db",
@@ -195,12 +195,12 @@ def collect_values() -> dict[str, str]:
         "HIGH_LEVEL_ALLOWED_HOSTS": _ask(
             "High-level allowed hosts (empty allows all Host headers)", DEFAULTS["HIGH_LEVEL_ALLOWED_HOSTS"]
         ),
-        "MEMORY_AGENT_QUEUE_DB": _ask("Memory-agent queue DB path in container", DEFAULTS["MEMORY_AGENT_QUEUE_DB"]),
-        "MEMORY_AGENT_STATE_DIR": _ask("Memory-agent state dir in container", DEFAULTS["MEMORY_AGENT_STATE_DIR"]),
-        "MEMORY_AGENT_TIMEOUT_SECONDS": _ask("Recall timeout seconds", DEFAULTS["MEMORY_AGENT_TIMEOUT_SECONDS"]),
-        "MEMORY_AGENT_MAX_RETRIES": _ask("Queue retry attempts", DEFAULTS["MEMORY_AGENT_MAX_RETRIES"]),
-        "OPENCODE_HOST": _ask("OpenCode internal host", DEFAULTS["OPENCODE_HOST"]),
-        "OPENCODE_PORT": _ask("OpenCode internal port", DEFAULTS["OPENCODE_PORT"]),
+        "MEMORY_AGENT_QUEUE_DB": DEFAULTS["MEMORY_AGENT_QUEUE_DB"],
+        "MEMORY_AGENT_STATE_DIR": DEFAULTS["MEMORY_AGENT_STATE_DIR"],
+        "MEMORY_AGENT_TIMEOUT_SECONDS": DEFAULTS["MEMORY_AGENT_TIMEOUT_SECONDS"],
+        "MEMORY_AGENT_MAX_RETRIES": DEFAULTS["MEMORY_AGENT_MAX_RETRIES"],
+        "OPENCODE_HOST": DEFAULTS["OPENCODE_HOST"],
+        "OPENCODE_PORT": DEFAULTS["OPENCODE_PORT"],
     }
 
 

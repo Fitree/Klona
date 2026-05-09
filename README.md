@@ -38,13 +38,13 @@ If you need to inspect or stop only the one-off memory-agent container, use `doc
 Verify the services are running:
 
 ```bash
-curl http://localhost:32311/health  # high-level memory-agent
+curl http://localhost:32310/health  # high-level memory-agent
 ```
 
 Default user-facing MCP endpoint:
 
 ```text
-http://localhost:32311/mcp  high-level user-agent recall/remember tools
+http://localhost:32310/mcp  high-level user-agent recall/remember tools
 ```
 
 Use the high-level endpoint for normal agents. In the full Compose stack, the low-level endpoint is reachable only inside the Docker network at `http://memory-server:8000/mcp` for internal `memory-agent` communication.
@@ -65,7 +65,7 @@ Install the OpenCode integration:
 python install_agent.py --platform opencode
 ```
 
-The installer asks for the high-level Klona memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`. For the default stack, use `http://localhost:32311/mcp` and `HIGH_LEVEL_MCP_AUTH_TOKEN` from `.env`; leave the installer token empty if the high-level token is empty.
+The installer asks for the high-level Klona memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`. For the default stack, use `http://localhost:32310/mcp` and `HIGH_LEVEL_MCP_AUTH_TOKEN` from `.env`; leave the installer token empty if the high-level token is empty.
 
 For non-interactive installs, pass the MCP URL and bearer token as dashed arguments:
 

@@ -68,10 +68,13 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("Empty disables DNS rebinding protection and allows all Host headers", env)
         self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
         self.assertIn("Empty disables auth", env)
+        self.assertIn("HIGH_LEVEL_MCP_HOST_PORT=32310", env)
 
     def test_compose_passes_empty_allowed_hosts_without_non_empty_fallbacks(self):
         compose = (ROOT / "docker-compose.yml").read_text()
         self.assertIn("HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS-}", compose)
+        self.assertIn('"${HIGH_LEVEL_MCP_HOST_PORT:-32310}:8080"', compose)
+        self.assertNotIn('"${HIGH_LEVEL_MCP_HOST_PORT:-32311}:8080"', compose)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", compose)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS:-localhost", compose)
         self.assertNotIn("HIGH_LEVEL_ALLOWED_HOSTS:-localhost", compose)
@@ -115,6 +118,38 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("token_urlsafe", script)
         self.assertIn('"HIGH_LEVEL_MCP_AUTH_TOKEN": ""', script)
         self.assertIn("empty disables auth", script)
+        self.assertIn('"HIGH_LEVEL_MCP_HOST_PORT": "32310"', script)
+
+    def test_init_collect_values_prompts_only_user_facing_settings(self):
+        module = load_init_script_module()
+        answers = iter(["32312", "/tmp/vault", "token", "localhost,127.0.0.1"])
+
+        with mock.patch("builtins.input", side_effect=lambda prompt: next(answers)) as input_mock:
+            values = module.collect_values()
+
+        self.assertEqual(input_mock.call_count, 4)
+        prompts = "\n".join(call.args[0] for call in input_mock.call_args_list)
+        self.assertIn("High-level user-agent MCP host port", prompts)
+        self.assertIn("Host markdown vault directory", prompts)
+        self.assertIn("High-level user-agent MCP bearer token", prompts)
+        self.assertIn("High-level allowed hosts", prompts)
+        self.assertNotIn("Memory-agent queue DB path in container", prompts)
+        self.assertNotIn("Memory-agent state dir in container", prompts)
+        self.assertNotIn("Recall timeout seconds", prompts)
+        self.assertNotIn("Queue retry attempts", prompts)
+        self.assertNotIn("OpenCode internal host", prompts)
+        self.assertNotIn("OpenCode internal port", prompts)
+
+        self.assertEqual(values["HIGH_LEVEL_MCP_HOST_PORT"], "32312")
+        self.assertEqual(values["HOST_VAULT_DIR"], "/tmp/vault")
+        self.assertEqual(values["HIGH_LEVEL_MCP_AUTH_TOKEN"], "token")
+        self.assertEqual(values["HIGH_LEVEL_ALLOWED_HOSTS"], "localhost,127.0.0.1")
+        self.assertEqual(values["MEMORY_AGENT_QUEUE_DB"], "/state/queue.db")
+        self.assertEqual(values["MEMORY_AGENT_STATE_DIR"], "/state")
+        self.assertEqual(values["MEMORY_AGENT_TIMEOUT_SECONDS"], "600")
+        self.assertEqual(values["MEMORY_AGENT_MAX_RETRIES"], "2")
+        self.assertEqual(values["OPENCODE_HOST"], "127.0.0.1")
+        self.assertEqual(values["OPENCODE_PORT"], "4096")
 
     def test_init_command_sequence_is_guarded_for_interactive_memory_agent(self):
         script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
@@ -144,7 +179,7 @@ class ServerSideAssetTests(unittest.TestCase):
     def test_init_health_check_requires_memory_agent_identity(self):
         module = load_init_script_module()
         with mock.patch.object(module.urllib.request, "urlopen", return_value=FakeHealthResponse()):
-            self.assertTrue(module._is_healthy("http://localhost:32311/health"))
+            self.assertTrue(module._is_healthy("http://localhost:32310/health"))
         for body in [
             b'{"status":"ok","server":"unrelated","version":"0.1.0"}',
             b'{"status":"ok","server":"klona-memory-agent","version":"9.9.9"}',
@@ -153,9 +188,9 @@ class ServerSideAssetTests(unittest.TestCase):
         ]:
             with self.subTest(body=body):
                 with mock.patch.object(module.urllib.request, "urlopen", return_value=FakeHealthResponse(body=body)):
-                    self.assertFalse(module._is_healthy("http://localhost:32311/health"))
+                    self.assertFalse(module._is_healthy("http://localhost:32310/health"))
         with mock.patch.object(module.urllib.request, "urlopen", return_value=FakeHealthResponse(status=204)):
-            self.assertFalse(module._is_healthy("http://localhost:32311/health"))
+            self.assertFalse(module._is_healthy("http://localhost:32310/health"))
 
     def test_init_status_helper_does_not_mask_child_failures_after_detach(self):
         module = load_init_script_module()
@@ -169,7 +204,7 @@ class ServerSideAssetTests(unittest.TestCase):
         detached = module.threading.Event()
         done = module.threading.Event()
         with mock.patch.object(module, "_is_healthy", return_value=True), mock.patch.object(module.os, "write", side_effect=OSError):
-            module._poll_health_until_detach("http://localhost:32311/health", 123, detached, done)
+            module._poll_health_until_detach("http://localhost:32310/health", 123, detached, done)
         self.assertFalse(detached.is_set())
 
         writes = []
@@ -181,7 +216,7 @@ class ServerSideAssetTests(unittest.TestCase):
         detached = module.threading.Event()
         done = module.threading.Event()
         with mock.patch.object(module, "_is_healthy", return_value=True), mock.patch.object(module.os, "write", side_effect=record_write):
-            module._poll_health_until_detach("http://localhost:32311/health", 123, detached, done)
+            module._poll_health_until_detach("http://localhost:32310/health", 123, detached, done)
         self.assertTrue(detached.is_set())
         self.assertEqual(writes[0], (123, module.DOCKER_DETACH_SEQUENCE))
 
