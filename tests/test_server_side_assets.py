@@ -54,9 +54,6 @@ class ServerSideAssetTests(unittest.TestCase):
             "HIGH_LEVEL_MCP_HOST_PORT",
             "HIGH_LEVEL_MCP_AUTH_TOKEN",
             "HIGH_LEVEL_ALLOWED_HOSTS",
-            "MEMORY_AGENT_QUEUE_DB",
-            "MEMORY_AGENT_TIMEOUT_SECONDS",
-            "MEMORY_AGENT_MAX_RETRIES",
         ]:
             self.assertIn(f"{name}=", env)
         self.assertNotIn("LOW_LEVEL_MCP_HOST_PORT", env)
@@ -66,6 +63,9 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("MEMORY_AGENT_STATE_DIR", env)
         self.assertNotIn("OPENCODE_HOST", env)
         self.assertNotIn("OPENCODE_PORT", env)
+        self.assertNotIn("MEMORY_AGENT_QUEUE_DB", env)
+        self.assertNotIn("MEMORY_AGENT_TIMEOUT_SECONDS", env)
+        self.assertNotIn("MEMORY_AGENT_MAX_RETRIES", env)
         self.assertIn("HIGH_LEVEL_ALLOWED_HOSTS=\n", env)
         self.assertIn("Empty disables DNS rebinding protection and allows all Host headers", env)
         self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
@@ -87,6 +87,12 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-http://127.0.0.1:4096}", compose)
         self.assertNotIn("OPENCODE_HOST", compose)
         self.assertNotIn("OPENCODE_PORT", compose)
+
+    def test_compose_preserves_internal_memory_agent_defaults(self):
+        compose = (ROOT / "docker-compose.yml").read_text()
+        self.assertIn("MEMORY_AGENT_QUEUE_DB: ${MEMORY_AGENT_QUEUE_DB:-/state/queue.db}", compose)
+        self.assertIn("MEMORY_AGENT_TIMEOUT_SECONDS: ${MEMORY_AGENT_TIMEOUT_SECONDS:-600}", compose)
+        self.assertIn("MEMORY_AGENT_MAX_RETRIES: ${MEMORY_AGENT_MAX_RETRIES:-2}", compose)
 
     def test_compose_keeps_low_level_server_internal_only(self):
         compose = (ROOT / "docker-compose.yml").read_text()
@@ -155,12 +161,17 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertEqual(values["HOST_VAULT_DIR"], "/tmp/vault")
         self.assertEqual(values["HIGH_LEVEL_MCP_AUTH_TOKEN"], "token")
         self.assertEqual(values["HIGH_LEVEL_ALLOWED_HOSTS"], "localhost,127.0.0.1")
-        self.assertEqual(values["MEMORY_AGENT_QUEUE_DB"], "/state/queue.db")
+        self.assertNotIn("MEMORY_AGENT_QUEUE_DB", values)
         self.assertNotIn("MEMORY_AGENT_STATE_DIR", values)
-        self.assertEqual(values["MEMORY_AGENT_TIMEOUT_SECONDS"], "600")
-        self.assertEqual(values["MEMORY_AGENT_MAX_RETRIES"], "2")
+        self.assertNotIn("MEMORY_AGENT_TIMEOUT_SECONDS", values)
+        self.assertNotIn("MEMORY_AGENT_MAX_RETRIES", values)
         self.assertNotIn("OPENCODE_HOST", values)
         self.assertNotIn("OPENCODE_PORT", values)
+
+        generated_env = module.build_env(values)
+        self.assertNotIn("MEMORY_AGENT_QUEUE_DB", generated_env)
+        self.assertNotIn("MEMORY_AGENT_TIMEOUT_SECONDS", generated_env)
+        self.assertNotIn("MEMORY_AGENT_MAX_RETRIES", generated_env)
 
     def test_init_command_sequence_is_guarded_for_interactive_memory_agent(self):
         script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
@@ -253,10 +264,17 @@ class ServerSideAssetTests(unittest.TestCase):
     def test_low_level_readme_does_not_point_normal_installer_at_admin_endpoint(self):
         readme = (ROOT / "memory_server" / "README.md").read_text()
         self.assertNotIn("python install_agent.py --platform opencode", readme)
+        self.assertNotIn("cp .env.example .env", readme)
+        self.assertNotIn("docker compose up -d --build", readme)
+        self.assertNotIn("http://localhost:32310/mcp", readme)
         self.assertIn("trusted admin/direct MCP clients", readme)
-        self.assertIn("Configure those clients manually", readme)
+        self.assertIn("not published to the host", readme)
         self.assertIn("recall(input: str)", readme)
         self.assertIn("remember(input: str)", readme)
+
+    def test_obsolete_memory_server_local_compose_assets_are_removed(self):
+        self.assertFalse((ROOT / "memory_server" / "docker-compose.yml").exists())
+        self.assertFalse((ROOT / "memory_server" / ".env.example").exists())
 
     def test_opencode_snippet_uses_high_level_tools_not_local_subagent(self):
         snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()

@@ -49,7 +49,7 @@ http://localhost:32310/mcp  high-level user-agent recall/remember tools
 
 Use the high-level endpoint for normal agents. In the full Compose stack, the low-level endpoint is reachable only inside the Docker network at `http://memory-server:8000/mcp` for internal `memory-agent` communication.
 
-See [`memory_server/README.md`](memory_server/README.md) for standalone low-level server configuration, vault format, MCP tools, and public safety notes.
+See [`memory_server/README.md`](memory_server/README.md) for low-level direct/admin server details, vault format, MCP tools, and public safety notes.
 
 ### Agent integration
 
