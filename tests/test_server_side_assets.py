@@ -231,10 +231,9 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertTrue(detached.is_set())
         self.assertEqual(writes[0], (123, module.DOCKER_DETACH_SEQUENCE))
 
-    def test_legacy_local_memory_agent_asset_is_marked_deprecated(self):
-        asset = (ROOT / "klona_agent" / "opencode" / "assets" / "agents" / "klona-memory.md").read_text()
-        self.assertIn("DEPRECATED", asset)
-        self.assertIn("not installed", asset.lower())
+    def test_legacy_local_memory_agent_asset_is_removed(self):
+        asset = ROOT / "klona_agent" / "opencode" / "assets" / "agents" / "klona-memory.md"
+        self.assertFalse(asset.exists())
 
     def test_memory_agent_dockerfile_documents_runtime_command(self):
         dockerfile = (ROOT / "memory_agent" / "Dockerfile").read_text()
@@ -263,6 +262,8 @@ class ServerSideAssetTests(unittest.TestCase):
         snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
         self.assertIn("recall(input: str)", snippet)
         self.assertIn("remember(input: str)", snippet)
+        self.assertIn("`klona_memory` MCP", snippet)
+        self.assertNotIn("KLONA MCP", snippet)
         self.assertNotIn("Do **not** delegate memory work to a local `klona-memory` subagent", snippet)
 
 
