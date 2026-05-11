@@ -1,76 +1,96 @@
-# KLONA: Knowledge-Linked Omni Neural Assistant
+# KLONA: memory for agents that should remember you
 
-Your agent should not wake up every morning with amnesia.
+> Your agent should not wake up every morning with amnesia.
 
-Klona is an inspectable memory layer for any AI agent you use. It stores knowledge in a local markdown vault, exposes it through an MCP server, and gives agents a shared way to recall, store, and inject useful context across sessions.
+Klona is an inspectable memory layer for agents: a user-owned markdown knowledge base plus a server-side memory agent that makes recall and storage feel consistent across the tools you use.
 
-In Swedish, **klona** means "to clone." The spirit of this project is to help agents clone enough of your working knowledge, preferences, projects, and intent to collaborate like long-lived partners instead of stateless chat windows.
+In Swedish, **klona** means "to clone." The goal is not to clone a person; it is to clone enough of your knowledge, preferences, projects, and intent that AI agents can collaborate with you over time instead of restarting from zero in every session.
 
-## Quickstart
+The new direction is server-side: Klona should become **your working memory for agents**. The aim is that whether you use Claude, OpenCode, Pi, ChatGPT, Codex, or another platform, the memory behavior comes from the same user-owned server rather than from each platform's separate context silo.
 
-### Run the server-side Klona memory stack
+## ✦ The memory layer your agents share
 
-The recommended setup runs two MCP services with Docker Compose:
+- **Wiki-style knowledge base**: Memory lives in an inspectable markdown vault with ordinary files, directories, and `[[wikilinks]]`.
+- **Server-side memory agent**: Local/user-side agents call the same high-level memory tools while the server-side agent owns working context, recall, remember queues, duplicate checks, and memory refinement.
+- **Unified cross-platform experience**: The same memory agent is designed to serve multiple agent platforms, so changing clients does not mean changing what your assistant remembers.
+- **User-owned memory server**: Memory is your asset, your leverage, and your control plane. The server, vault, tokens, and access boundaries are under your control rather than locked inside one assistant product.
 
-- `memory-server`: the low-level direct/admin MCP endpoint for vault tools. This is internal-only on the Docker Compose network by default and is the only service that mounts `HOST_VAULT_DIR`.
-- `memory-agent`: the high-level user-agent MCP endpoint exposing `recall(input: str)` and `remember(input: str)`. It stores only queue/state in a named Docker volume and never mounts the vault.
+## How Klona works
+
+Klona is split into a high-level user-facing memory agent and a low-level vault server:
+
+1. **User-side/local agents** connect through the `klona_memory` MCP tools:
+   - `recall(input: str)` retrieves relevant context synchronously when an agent needs memory.
+   - `remember(input: str)` queues candidate memories asynchronously so the current conversation can continue.
+2. **High-level `memory-agent`** owns shared working context across calls. It handles synchronous recall, queued async remember, memory-agent reasoning, all normal user-agent MCP traffic, and internal calls to the low-level server.
+3. **Low-level `memory-server`** owns and mounts the markdown vault. It exposes direct vault tools only for internal/admin use; in the supported stack, normal agents should not call this endpoint directly.
+4. **Mental-model injection** uses `KLONA_MEMORY_MENTAL_MODEL.md` as a fast session-start summary. Where supported, Klona injects that summary into the first message/new session behavior so agents start with a useful model before making explicit recall calls.
+
+The important boundary: normal agents use the high-level endpoint. The low-level vault server is internal/admin infrastructure.
+
+## Quick start
+
+### 1. Start your own agentic memory server
 
 Requirement: Docker with Docker Compose v2.
 
-Start the stack interactively from this repository:
+From the repository root, run:
 
 ```bash
 python3 scripts/init_memory_stack.py
 ```
 
-The init script asks non-model setup questions first, writes `.env`, builds the images, starts `memory-server` detached, then runs `memory-agent` in the foreground with service ports enabled. This keeps the low-level server away from stdin and off the host network while surfacing the memory-agent prompts, including `Run OpenCode auth login now? [y/N]`. High-level MCP bearer-token prompts default to empty; an empty token disables auth for that endpoint, while a non-empty token requires `Authorization: Bearer <token>`. The high-level allowed-host prompt also defaults to empty, which disables DNS rebinding protection and allows all Host headers; set a comma-separated allowed-host list if you want Host header checks. OpenCode auth, model selection, and reasoning-effort selection happen later inside the final `memory-agent` container so choices match the runtime environment.
+The setup prompts ask for:
 
-After the high-level memory-agent health endpoint is reachable, the init script automatically sends Docker's detach sequence and exits successfully while leaving the same `memory-agent` container running. If setup, build, startup, or the foreground memory-agent exits before that healthy detach point, the init script stops the detached `memory-server` container as cleanup.
+- **High-level user-agent MCP host port**: defaults to `32310`.
+- **Host markdown vault directory**: defaults to `./vault`.
+- **High-level user-agent MCP bearer token**: optional; empty disables auth for the high-level endpoint.
+- **High-level allowed hosts**: optional; empty allows all Host headers, while a comma-separated list enables Host header checks.
 
-Stop the running stack later with:
+The script writes `.env`, builds the Docker images, starts the low-level `memory-server`, then runs the high-level `memory-agent`. The `memory-agent` may ask OpenCode auth/model prompts inside the container. Once healthy, the script detaches and leaves the stack running.
+
+Verify the high-level memory-agent health endpoint:
+
+```bash
+curl http://localhost:32310/health
+```
+
+Default user-facing MCP endpoint for the root stack:
+
+```text
+http://localhost:32310/mcp
+```
+
+Stop the stack later with:
 
 ```bash
 docker compose down
 ```
 
-If you need to inspect or stop only the one-off memory-agent container, use `docker compose ps` to find it and `docker stop <container>`.
+### 2. Connect your local agent
 
-Verify the services are running:
+OpenCode is the currently supported local-agent integration.
 
-```bash
-curl http://localhost:32310/health  # high-level memory-agent
-```
-
-Default user-facing MCP endpoint:
-
-```text
-http://localhost:32310/mcp  high-level user-agent recall/remember tools
-```
-
-Use the high-level endpoint for normal agents. In the full Compose stack, the low-level endpoint is reachable only inside the Docker network at `http://memory-server:8000/mcp` for internal `memory-agent` communication.
-
-See [`memory_server/README.md`](memory_server/README.md) for low-level direct/admin server details, vault format, MCP tools, and public safety notes.
-
-### Agent integration
-
-Klona agents are platform-specific integrations designed to use the Klona MCP server as a complete memory workflow: recall when context is missing, store durable knowledge, and inject useful memory into future sessions.
-
-#### OpenCode
-
-Requirements: Python 3 and OpenCode.
-
-Install the OpenCode integration:
+Install or refresh the OpenCode integration:
 
 ```bash
 python install_agent.py --platform opencode
 ```
 
-The installer asks for the high-level Klona memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`. For the default stack, use `http://localhost:32310/mcp` and `HIGH_LEVEL_MCP_AUTH_TOKEN` from `.env`; leave the installer token empty if the high-level token is empty.
+When prompted, enter the high-level MCP URL for the default stack:
 
-For non-interactive installs, pass the MCP URL and bearer token as dashed arguments:
+```text
+http://localhost:32310/mcp
+```
+
+For the bearer token, use the same high-level token you configured during stack setup. Leave it empty if you left `HIGH_LEVEL_MCP_AUTH_TOKEN` empty.
+
+Non-interactive install:
 
 ```bash
-python install_agent.py --platform opencode --klona-memory-server-url {your-high-level-klona-mcp-url} --klona-memory-server-token {your-high-level-klona-mcp-token}
+python install_agent.py --platform opencode \
+  --klona-memory-server-url http://localhost:32310/mcp \
+  --klona-memory-server-token '<your-high-level-token>'
 ```
 
 Uninstall the OpenCode integration:
@@ -79,42 +99,17 @@ Uninstall the OpenCode integration:
 python install_agent.py --uninstall --platform opencode
 ```
 
-## How Klona works
+Planned future integrations include Claude Code, Codex, Pi, and other agent platforms.
 
-Klona has a few small pieces that work together:
+## Low-level/admin caution
 
-1. **Markdown vault**: Your memory is stored as ordinary markdown files. The directory tree is the index, files can link to each other with `[[wikilinks]]`, and `KLONA_MEMORY_MENTAL_MODEL.md` is a special summary file intended for fast session-start context.
-2. **Low-level MCP memory server**: `memory_server/` exposes the vault through direct/admin MCP tools for tree/list/read/write/update/delete/move/search/backlinks operations. It is the only container with the vault mount.
-3. **High-level memory-agent**: `memory_agent/` exposes `recall(input)` and `remember(input)` for user-side agents. `recall` waits for the server-side memory agent to retrieve context; `remember` acknowledges after queue insert and is processed asynchronously.
-4. **OpenCode integration**: The installer adds Klona-managed OpenCode files and MCP configuration under `~/.config/opencode`, pointing normal agents at the high-level MCP endpoint.
-5. **`KLONA_MEMORY_MENTAL_MODEL.md` injection**: The OpenCode plugin calls a private high-level memory-agent HTTP endpoint that exact-reads `/KLONA_MEMORY_MENTAL_MODEL.md` through the low-level MCP server, then prepends it to the first user message of a root OpenCode session. This endpoint is not exposed as a user-visible MCP tool; the plugin also marks sessions for reinjection after compaction.
+In the supported Compose stack, `memory-server` is reachable only inside the Docker network at `http://memory-server:8000/mcp` for internal `memory-agent` use. It is the only service that mounts the markdown vault.
 
-The result is a memory loop where user-side agents use simple recall/remember tools while the server-side memory-agent owns vault navigation, storage gating, duplicate checks, and working continuity.
+Do not point normal user-side agents at the low-level server. Use the high-level memory-agent endpoint (`http://localhost:32310/mcp` by default) so agents interact through `recall(input: str)` and `remember(input: str)` rather than direct vault read/write/admin tools.
 
-### Auth and model flow
+See [`memory_server/README.md`](memory_server/README.md) for direct/admin server details and safety notes.
 
-- The high-level MCP endpoint supports a bearer token and allowed-host settings. Empty tokens disable auth for that endpoint; non-empty tokens require exact Bearer auth. Empty allowed-host settings allow all Host headers; non-empty comma-separated lists enable DNS rebinding protection.
-- The low-level MCP server is not published to the host in the full stack. The memory-agent receives its fixed internal URL over the Compose network.
-- During first attached startup, the memory-agent container asks whether to run `opencode auth login`. If auth fails, it asks whether to retry, proceed without auth, or terminate.
-- After auth/proceed, the container discovers available OpenCode models and asks for model and reasoning-effort choices inside the final runtime container.
+## Future direction
 
-### Non-goals for this architecture
-
-- No dashboard/UI.
-- No direct vault mount in `memory-agent`.
-- No named Docker volume for OpenCode auth/session/cache; only memory-agent queue/state is persisted.
-- No automated test requires real OpenCode/GPT auth.
-
-## Progress and roadmap
-
-Klona is early, but the core memory loop is already working.
-
-Done:
-- [x] Markdown vault MCP server.
-- [x] OpenCode agent integration.
-
-Next:
-- [ ] Claude Code agent integration.
-- [ ] Codex agent integration.
-- [ ] Vault auto-maintenance agent.
-- [ ] Knowledge graph dashboard.
+- Expand platform compatibility beyond OpenCode while keeping one unified memory behavior.
+- Improve server-side agent memory refinement so queued memories are deduplicated, organized, and distilled automatically.
