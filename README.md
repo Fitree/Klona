@@ -1,62 +1,118 @@
-# KLONA: Knowledge-Linked Omni Neural Assistant
+# KLONA: memory for agents that should remember you
 
-Your agent should not wake up every morning with amnesia.
+> Your agent should not wake up every morning with amnesia.
 
-Klona is an inspectable memory layer for any AI agent you use. It stores knowledge in a local markdown vault, exposes it through an MCP server, and gives agents a shared way to recall, store, and inject useful context across sessions.
+Klona is an inspectable memory layer for agents: a user-owned markdown knowledge base plus a server-side memory agent that makes recall and storage feel consistent across the tools you use.
 
-In Swedish, **klona** means "to clone." The spirit of this project is to help agents clone enough of your working knowledge, preferences, projects, and intent to collaborate like long-lived partners instead of stateless chat windows.
+In Swedish, **klona** means "to clone." The goal is not to clone a person; it is to clone enough of your knowledge, preferences, projects, and intent that AI agents can collaborate with you over time instead of restarting from zero in every session.
 
-## Quickstart
+The new direction is server-side: Klona should become **your working memory for agents**. The aim is that whether you use Claude, OpenCode, Pi, ChatGPT, Codex, or another platform, the memory behavior comes from the same user-owned server rather than from each platform's separate context silo.
 
-### Run the Klona MCP server
+## ✦ The memory layer your agents share
 
-The Klona MCP server exposes your markdown vault through the MCP protocol. Any platform that supports MCP can connect to it directly, even without a Klona-specific agent integration.
+- **Wiki-style knowledge base**: Memory lives in an inspectable markdown vault with ordinary files, directories, and `[[wikilinks]]`.
+- **Server-side memory agent**: Local/user-side agents call your Klona MCP server, while the server-side agent owns working context, recall, remember queues, duplicate checks, and memory refinement.
+- **Unified cross-platform experience**: The same memory agent is designed to serve multiple agent platforms, so changing clients does not mean changing what your assistant remembers.
+- **User-owned memory server**: Memory is your asset, your leverage, and your control plane. The server, vault, tokens, and access boundaries are under your control rather than locked inside one assistant product.
+
+## How Klona works
+
+Klona has four user-facing pieces working together:
+
+1. **User-side/local agents** connect to your user-owned Klona MCP server through the `klona_memory` tools:
+   - `recall(input: str)` retrieves relevant context synchronously when an agent needs memory.
+   - `remember(input: str)` queues candidate memories asynchronously so the current conversation can continue.
+2. **The Klona MCP server runs the server-side memory agent**. The server-side agent keeps shared working memory across calls, handles recall immediately, processes remember requests in the background, and refines memories before they are written.
+3. **Mental-model injection** uses `KLONA_MEMORY_MENTAL_MODEL.md` as a fast session-start summary. Where supported, Klona injects that summary into the first message/new session behavior so agents start with a useful model before making explicit recall calls.
+4. **Inspectable markdown persistence** keeps durable memory in a vault you own, with ordinary files, directories, and `[[wikilinks]]`.
+
+The important boundary: normal agents connect to your Klona MCP server. The detailed vault service behind it is implementation/admin infrastructure, not the user-facing architecture.
+
+## Quick start
+
+### 1. Start your own agentic memory server
 
 Requirement: Docker with Docker Compose v2.
 
-Start the server from this repository:
+From the repository root, run the setup script and follow its instructions:
 
 ```bash
-cd memory_server
-cp .env.example .env
-# edit .env and set AUTH_TOKEN to a private value
-docker compose up -d --build
+python3 scripts/init_memory_stack.py
 ```
 
-Verify the server is running:
+During setup you will see a few prompts:
+
+- **Klona MCP host port**: the localhost port where your agents connect to Klona. The default is `32310`, so the MCP URL becomes `http://localhost:32310/mcp`.
+- **Host markdown vault directory**: the folder on your machine where memory is stored as markdown. The default is `./vault`.
+- **Klona MCP bearer token**: optional authentication token for the MCP server. Empty means no token is configured. When set, the MCP server requires this token for authentication.
+- **Allowed hosts**: optional Host-header allowlist. Empty means all Host headers are allowed. When set, only the comma-separated hosts you list, such as `localhost,127.0.0.1`, are accepted.
+- **OpenCode auth/model prompts**: the server-side memory agent currently runs through OpenCode, so the setup may ask whether to run OpenCode auth login and which model/reasoning effort to use.
+
+The script writes `.env`, builds the Docker images, starts the Klona MCP server, and runs the server-side memory agent. The memory agent may ask OpenCode auth/model prompts inside the container. Once healthy, the script detaches and leaves the stack running.
+
+Verify the health endpoint:
 
 ```bash
 curl http://localhost:32310/health
 ```
 
-The MCP endpoint is typically:
+Default MCP endpoint for the root stack:
 
 ```text
 http://localhost:32310/mcp
 ```
 
-See [`memory_server/README.md`](memory_server/README.md) for memory server configuration, vault format, MCP tools, and public safety notes.
+Stop the stack later with:
 
-### Agent integration
+```bash
+docker compose down
+```
 
-Klona agents are platform-specific integrations designed to use the Klona MCP server as a complete memory workflow: recall when context is missing, store durable knowledge, and inject useful memory into future sessions.
+### 2. Connect your local agent
 
-#### OpenCode
+Choose one of two connection paths based on what gets installed in the local agent.
 
-Requirements: Python 3 and OpenCode.
+#### MCP-only connection
 
-Install the OpenCode integration:
+Use this path with any MCP-capable local agent or client that can connect to your Klona MCP server endpoint. Connect it to:
+
+```text
+http://localhost:32310/mcp
+```
+
+The MCP tools are:
+
+- `recall(input: str)`
+- `remember(input: str)`
+
+If you configured a bearer token during stack setup, set the same token in your MCP client. If the Klona MCP server has no token configured, the MCP client sends no bearer token.
+
+This exposes only the `recall` and `remember` MCP tools to the agent. It does not install any platform-specific Klona instructions, system prompt updates, or plugins.
+
+#### Full Klona integration
+
+Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and the mental-model plugin. OpenCode is currently the only supported full integration.
+
+Install or refresh the OpenCode integration:
 
 ```bash
 python install_agent.py --platform opencode
 ```
 
-The installer asks for the Klona memory MCP URL and bearer token, then writes the OpenCode integration to `~/.config/opencode`.
+When prompted, enter the Klona MCP URL for the default stack:
 
-For non-interactive installs, pass the MCP URL and bearer token as dashed arguments:
+```text
+http://localhost:32310/mcp
+```
+
+For the bearer token, set the same Klona MCP token you configured during stack setup. If the Klona MCP server has no token configured, the OpenCode MCP config is written without a bearer token.
+
+Non-interactive install for the default stack:
 
 ```bash
-python install_agent.py --platform opencode --klona-memory-server-url {your-klona-mcp-server-url} --klona-memory-server-token {your-klona-mcp-server-token}
+python install_agent.py --platform opencode \
+  --klona-memory-server-url http://localhost:32310/mcp \
+  --klona-memory-server-token '<your-token>'
 ```
 
 Uninstall the OpenCode integration:
@@ -65,28 +121,18 @@ Uninstall the OpenCode integration:
 python install_agent.py --uninstall --platform opencode
 ```
 
-## How Klona works
+Planned future integrations include Claude Code, Codex, Pi, and other agent platforms.
 
-Klona has a few small pieces that work together:
+## Advanced implementation note
 
-1. **Markdown vault**: Your memory is stored as ordinary markdown files. The directory tree is the index, files can link to each other with `[[wikilinks]]`, and `KLONA_MEMORY_MENTAL_MODEL.md` is a special summary file intended for fast session-start context.
-2. **MCP memory server**: `memory_server/` exposes the vault through MCP tools for tree/list/read/write/update/delete/move/search/backlinks operations.
-3. **`klona-memory` subagent**: The OpenCode integration installs a dedicated memory specialist agent that handles recall and storage requests through the MCP server.
-4. **OpenCode integration**: The installer adds Klona-managed OpenCode files and MCP configuration under `~/.config/opencode`.
-5. **`KLONA_MEMORY_MENTAL_MODEL.md` injection**: The OpenCode plugin reads `/KLONA_MEMORY_MENTAL_MODEL.md` from the vault and prepends it to the first user message of a root OpenCode session. It also marks sessions for reinjection after compaction.
+In the supported Compose stack, an internal vault service is reachable only inside the Docker network for server-side memory-agent use. It is the only service that mounts the markdown vault.
 
-The result is a memory loop where the agent can retrieve durable knowledge from the vault, update the vault when something is worth remembering, and start later sessions with a compact Klona memory mental model already in context.
+Do not point normal user-side agents at internal/admin services. Use your Klona MCP server (`http://localhost:32310/mcp` by default) so agents interact through `recall(input: str)` and `remember(input: str)`.
 
-## Progress and roadmap
+See [`memory_server/README.md`](memory_server/README.md) for direct/admin implementation details and safety notes.
 
-Klona is early, but the core memory loop is already working.
+## Future direction
 
-Done:
-- [x] Markdown vault MCP server.
-- [x] OpenCode agent integration.
-
-Next:
-- [ ] Claude Code agent integration.
-- [ ] Codex agent integration.
-- [ ] Vault auto-maintenance agent.
-- [ ] Knowledge graph dashboard.
+- Expand platform compatibility beyond OpenCode while keeping one unified memory behavior.
+- Improve server-side agent memory refinement so queued memories are deduplicated, organized, and distilled automatically.
+- Add a knowledge graph dashboard for exploring the markdown memory vault visually.

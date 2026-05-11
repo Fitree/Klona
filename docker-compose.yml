@@ -1,0 +1,38 @@
+services:
+  memory-server:
+    build: ./memory_server
+    volumes:
+      - ${HOST_VAULT_DIR:?set HOST_VAULT_DIR in .env}:/vault
+    environment:
+      VAULT_DIR: /vault
+      AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  memory-agent:
+    build: ./memory_agent
+    depends_on:
+      memory-server:
+        condition: service_healthy
+    ports:
+      - "${HIGH_LEVEL_MCP_HOST_PORT:-32310}:8080"
+    environment:
+      HIGH_LEVEL_MCP_AUTH_TOKEN: ${HIGH_LEVEL_MCP_AUTH_TOKEN:-}
+      HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS-}
+      LOW_LEVEL_MCP_URL: http://memory-server:8000/mcp
+      LOW_LEVEL_MCP_AUTH_TOKEN: ${LOW_LEVEL_MCP_AUTH_TOKEN:-}
+      MEMORY_AGENT_QUEUE_DB: ${MEMORY_AGENT_QUEUE_DB:-/state/queue.db}
+      MEMORY_AGENT_TIMEOUT_SECONDS: ${MEMORY_AGENT_TIMEOUT_SECONDS:-600}
+      MEMORY_AGENT_MAX_RETRIES: ${MEMORY_AGENT_MAX_RETRIES:-2}
+      OPENCODE_BASE_URL: ${OPENCODE_BASE_URL:-http://127.0.0.1:4096}
+    volumes:
+      - memory_agent_queue:/state
+    stdin_open: true
+    tty: true
+
+volumes:
+  memory_agent_queue:

@@ -2,12 +2,12 @@ import { promises as fs } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
-const MCP_PROTOCOL_VERSION = "2025-03-26"
-const MCP_ACCEPT_HEADER = "application/json, text/event-stream"
 const INITIAL_CONTEXT_OPEN = "<Klona_memory_mental_model>\n"
 const INITIAL_CONTEXT_CLOSE = "\n</Klona_memory_mental_model>"
-const DEFAULT_MCP_NAME = "klona_memory_server"
+const DEFAULT_MCP_NAME = "klona_memory"
+const DEFAULT_MCP_TIMEOUT_MS = 600_000
 const KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH = "/KLONA_MEMORY_MENTAL_MODEL.md"
+const INTERNAL_MENTAL_MODEL_PATH = "/internal/mental-model"
 const PLUGIN_STATE_DIR = path.join(
   os.homedir(),
   ".local",
@@ -43,7 +43,7 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     return {
       url: mcp.url,
       headers: mcp.headers ?? {},
-      timeout: typeof mcp.timeout === "number" ? mcp.timeout : 5000,
+      timeout: typeof mcp.timeout === "number" ? mcp.timeout : DEFAULT_MCP_TIMEOUT_MS,
     }
   }
 
@@ -77,181 +77,61 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     }
   }
 
-
-  async function parseMcpHttpResponse(response) {
-    const contentType = response.headers.get("content-type") ?? ""
-    const raw = await response.text()
-
-    if (!response.ok) {
-      throw new Error(`MCP request failed (${response.status}): ${raw || response.statusText}`)
-    }
-
-    if (!raw.trim()) return null
-
-    if (contentType.includes("text/event-stream")) {
-      const events = raw
-        .split(/\r?\n\r?\n/)
-        .map((chunk) => chunk
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => line.slice(5).trim())
-          .join("\n"))
-        .filter(Boolean)
-
-      for (const event of events) {
-        const parsed = JSON.parse(event)
-        if (parsed?.id !== undefined || parsed?.result || parsed?.error) return parsed
-      }
-
-      return null
-    }
-
-    return JSON.parse(raw)
+  function mentalModelEndpointUrl(mcpUrl) {
+    const url = new URL(mcpUrl)
+    const pathname = url.pathname.replace(/\/+$/, "")
+    url.pathname = pathname.endsWith("/mcp")
+      ? `${pathname.slice(0, -4)}${INTERNAL_MENTAL_MODEL_PATH}`
+      : INTERNAL_MENTAL_MODEL_PATH
+    url.search = ""
+    url.hash = ""
+    return url.toString()
   }
 
-  async function mcpPost({ url, headers, sessionId, body, timeout }) {
+  async function fetchPrivateMentalModelEndpoint({ url, headers, timeout }) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
 
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method: "GET",
         headers: {
-          Accept: MCP_ACCEPT_HEADER,
-          "Content-Type": "application/json",
-          ...(sessionId ? { "Mcp-Session-Id": sessionId } : {}),
+          Accept: "application/json",
           ...headers,
         },
-        body: JSON.stringify(body),
         signal: controller.signal,
       })
 
-      const payload = await parseMcpHttpResponse(response)
-      return {
-        payload,
-        sessionId: response.headers.get("Mcp-Session-Id") ?? sessionId ?? undefined,
-      }
+      const raw = await response.text()
+      let payload = null
+      if (raw.trim()) payload = JSON.parse(raw)
+
+      if (response.status === 404 && payload?.status === "missing") return payload
+      if (!response.ok) throw new Error(`private mental-model endpoint failed (${response.status}): ${raw || response.statusText}`)
+      return payload
     } finally {
       clearTimeout(timer)
     }
   }
 
-  async function initializeMcp(config) {
-    const initialize = await mcpPost({
-      url: config.url,
-      headers: config.headers,
-      timeout: config.timeout,
-      body: {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {
-          protocolVersion: MCP_PROTOCOL_VERSION,
-          capabilities: {},
-          clientInfo: {
-            name: "klona-memory-mental-model-injector-plugin",
-            version: "1.0.0",
-          },
-        },
-      },
-    })
-
-    if (initialize.payload?.error) {
-      throw new Error(initialize.payload.error.message || "MCP initialize failed")
-    }
-
-    const sessionId = initialize.sessionId
-    await mcpPost({
-      url: config.url,
-      headers: config.headers,
-      timeout: config.timeout,
-      sessionId,
-      body: {
-        jsonrpc: "2.0",
-        method: "notifications/initialized",
-      },
-    })
-
-    return sessionId
-  }
-
-  function extractMemoryContent(result) {
-    const direct = result?.structuredContent ?? result?.content
-    if (direct && typeof direct === "object" && typeof direct.content === "string") {
-      return direct.content.trim()
-    }
-
-    const items = Array.isArray(result?.content) ? result.content : []
-    for (const item of items) {
-      if (item?.type !== "text" || typeof item.text !== "string") continue
-      const text = item.text.trim()
-      if (!text) continue
-
-      try {
-        const parsed = JSON.parse(text)
-        if (parsed && typeof parsed.content === "string") {
-          return parsed.content.trim()
-        }
-      } catch {
-        return text
-      }
-    }
-
-    return ""
-  }
-
-  function resultText(result) {
-    const texts = []
-
-    if (typeof result?.content === "string") texts.push(result.content)
-    if (typeof result?.structuredContent?.content === "string") texts.push(result.structuredContent.content)
-
-    const items = Array.isArray(result?.content) ? result.content : []
-    for (const item of items) {
-      if (item?.type === "text" && typeof item.text === "string") texts.push(item.text)
-    }
-
-    return texts.join("\n").toLowerCase()
-  }
-
-  function isMissingKlonaMemoryMentalModelResult(result) {
-    if (!result?.isError) return false
-    const text = resultText(result)
-    return text.includes("not found") || text.includes("does not exist") || text.includes("no such file")
-  }
-
   async function readKlonaMemoryMentalModel() {
     const config = getMemoryMcpConfig()
-    if (!config) return ""
+    if (!config) return { status: "missing", content: "" }
 
-    const sessionId = await initializeMcp(config)
-    const call = await mcpPost({
-      url: config.url,
+    const endpointUrl = mentalModelEndpointUrl(config.url)
+    const payload = await fetchPrivateMentalModelEndpoint({
+      url: endpointUrl,
       headers: config.headers,
       timeout: config.timeout,
-      sessionId,
-      body: {
-        jsonrpc: "2.0",
-        id: 2,
-        method: "tools/call",
-        params: {
-          name: "vault_read",
-          arguments: {
-            path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
-          },
-        },
-      },
     })
 
-    if (call.payload?.error) {
-      throw new Error(call.payload.error.message || `MCP tool call failed for ${KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH}`)
+    if (payload?.status === "ok" && typeof payload.content === "string") {
+      return { status: "ok", content: payload.content }
     }
-
-    if (isMissingKlonaMemoryMentalModelResult(call.payload?.result)) {
-      return ""
+    if (payload?.status === "missing") {
+      return { status: "missing", content: "" }
     }
-
-    return extractMemoryContent(call.payload?.result)
+    throw new Error(payload?.error || "private mental-model endpoint returned an unexpected response")
   }
 
   function injectionStatusFilePath(sessionID) {
@@ -276,9 +156,64 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     )
   }
 
+  async function getSessionMessageHistoryStatus(sessionID) {
+    try {
+      const response = await client.session.messages({
+        path: { id: sessionID },
+        query: { limit: 1 },
+      })
+
+      if (response?.error) {
+        await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session messages lookup returned an error", {
+          sessionID,
+          error: response.error?.message ?? String(response.error),
+        })
+        return { hasExistingMessages: true, reason: "message-history-unverified" }
+      }
+
+      const messages = response?.data ?? response
+      if (!Array.isArray(messages)) {
+        await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session messages lookup returned an unexpected shape", {
+          sessionID,
+        })
+        return { hasExistingMessages: true, reason: "message-history-unverified" }
+      }
+
+      return {
+        hasExistingMessages: messages.length > 0,
+        reason: messages.length > 0 ? "resumed-existing-session" : "new-empty-session",
+      }
+    } catch (error) {
+      await log("warn", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because session messages lookup failed", {
+        sessionID,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return { hasExistingMessages: true, reason: "message-history-unverified" }
+    }
+  }
+
   async function ensureInjectionStatus(sessionID) {
     const status = await readInjectionStatus(sessionID)
-    if (status) return status
+    if (status) {
+      if (status.should_inject === true && status.reason === "first-user-message") {
+        const messageHistoryStatus = await getSessionMessageHistoryStatus(sessionID)
+        if (messageHistoryStatus.hasExistingMessages) {
+          await writeInjectionStatus(sessionID, {
+            should_inject: false,
+            reason: `stale-first-user-message-${messageHistoryStatus.reason}`,
+          })
+          return null
+        }
+      }
+
+      return status
+    }
+
+    const messageHistoryStatus = await getSessionMessageHistoryStatus(sessionID)
+    if (messageHistoryStatus.hasExistingMessages) {
+      await writeInjectionStatus(sessionID, { should_inject: false, reason: messageHistoryStatus.reason })
+      return null
+    }
 
     const initialStatus = { should_inject: true, reason: "first-user-message" }
     await writeInjectionStatus(sessionID, initialStatus)
@@ -364,9 +299,13 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
 
       try {
         const status = await ensureInjectionStatus(sessionID)
+        if (!status) return
         if (status.should_inject === false) return
 
-        const memoryContent = await readKlonaMemoryMentalModel()
+        await writeInjectionStatus(sessionID, { should_inject: false, reason: `${status.reason}-consumed` })
+
+        const memoryResult = await readKlonaMemoryMentalModel()
+        const memoryContent = memoryResult.content
 
         if (!memoryContent) {
           if (!loggedSessions.has(sessionID)) {
@@ -375,6 +314,7 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
               sessionID,
               agent,
               path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
+              status: memoryResult.status,
             })
           }
           return
@@ -382,8 +322,6 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
 
         injected = prependKlonaMemoryMentalModelToFirstTextPart(output, memoryContent)
         if (!injected) return
-
-        await writeInjectionStatus(sessionID, { should_inject: false })
 
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)

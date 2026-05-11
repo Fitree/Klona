@@ -1,4 +1,4 @@
-"""OpenCode installer for KLONA Phase 1."""
+"""OpenCode installer for KLONA high-level memory MCP integration."""
 
 from __future__ import annotations
 
@@ -16,14 +16,14 @@ BEGIN_MARKER = "<Klona_Memory>"
 END_MARKER = "</Klona_Memory>"
 LEGACY_BEGIN_MARKER = "<!-- KLONA:BEGIN -->"
 LEGACY_END_MARKER = "<!-- KLONA:END -->"
-MCP_NAME = "klona_memory_server"
+MCP_NAME = "klona_memory"
 
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 SNIPPET_FILE = ASSETS_DIR / "AGENT.md.snippet"
-AGENT_SOURCE = ASSETS_DIR / "agents" / "klona-memory.md"
 PLUGIN_SOURCE = ASSETS_DIR / "plugins" / "klona-memory-mental-model-injector.js"
 PLUGIN_FILENAME = "klona-memory-mental-model-injector.js"
+LEGACY_AGENT_FILENAME = "klona-memory.md"
 
 
 def opencode_dir() -> Path:
@@ -83,21 +83,19 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
 
 def _prompt_mcp_url() -> str:
     try:
-        value = input("Klona memory MCP URL: ").strip()
+        value = input("Klona high-level memory MCP URL: ").strip()
     except (EOFError, KeyboardInterrupt) as exc:
-        raise SystemExit("Klona memory MCP URL entry cancelled") from exc
+        raise SystemExit("Klona high-level memory MCP URL entry cancelled") from exc
     if not value:
-        raise SystemExit("Klona memory MCP URL cannot be empty")
+        raise SystemExit("Klona high-level memory MCP URL cannot be empty")
     return value
 
 
 def _prompt_mcp_token() -> str:
     try:
-        value = getpass.getpass("Klona memory bearer token: ").strip()
+        value = getpass.getpass("Klona high-level memory bearer token (empty disables auth): ").strip()
     except (EOFError, KeyboardInterrupt) as exc:
-        raise SystemExit("Klona memory bearer token entry cancelled") from exc
-    if not value:
-        raise SystemExit("Klona memory bearer token cannot be empty")
+        raise SystemExit("Klona high-level memory bearer token entry cancelled") from exc
     return value
 
 
@@ -109,13 +107,15 @@ def _provided_value(value: str, empty_message: str) -> str:
 
 
 def _mcp_entry(url: str, token: str) -> dict[str, Any]:
-    return {
+    entry = {
         "type": "remote",
         "url": url,
         "enabled": True,
         "oauth": False,
-        "headers": {"Authorization": f"Bearer {token}"},
     }
+    if token:
+        entry["headers"] = {"Authorization": f"Bearer {token}"}
+    return entry
 
 
 def _managed_block() -> str:
@@ -126,7 +126,7 @@ def _managed_block() -> str:
 
 
 def _check_required_assets() -> None:
-    for path in [SNIPPET_FILE, AGENT_SOURCE, PLUGIN_SOURCE]:
+    for path in [SNIPPET_FILE, PLUGIN_SOURCE]:
         if not path.is_file():
             raise SystemExit(f"missing required asset: {path}")
 
@@ -236,24 +236,24 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
     target = opencode_dir()
     config_path = target / "opencode.json"
     agent_md = target / "AGENTS.md"
-    agent_copy = target / "agents" / "klona-memory.md"
+    legacy_agent_copy = target / "agents" / LEGACY_AGENT_FILENAME
     plugin_copy = target / "plugins" / PLUGIN_FILENAME
     _check_required_assets()
     config = _read_json_object(config_path)
     url = (
-        _provided_value(mcp_url, "Klona memory MCP URL cannot be empty")
+        _provided_value(mcp_url, "Klona high-level memory MCP URL cannot be empty")
         if mcp_url is not None
         else _prompt_mcp_url()
     )
     token = (
-        _provided_value(mcp_token, "Klona memory bearer token cannot be empty")
+        mcp_token.strip()
         if mcp_token is not None
         else _prompt_mcp_token()
     )
 
     snapshots = {
         agent_md: _snapshot_file(agent_md),
-        agent_copy: _snapshot_file(agent_copy),
+        legacy_agent_copy: _snapshot_file(legacy_agent_copy),
         plugin_copy: _snapshot_file(plugin_copy),
         config_path: _snapshot_file(config_path),
     }
@@ -262,7 +262,7 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         target.mkdir(parents=True, exist_ok=True)
         mutation_started = True
         _install_marker_block(agent_md)
-        _copy_required_asset(AGENT_SOURCE, agent_copy)
+        legacy_agent_copy.unlink(missing_ok=True)
         _copy_required_asset(PLUGIN_SOURCE, plugin_copy)
         _install_mcp_config(config_path, url, token, config)
     except BaseException:
@@ -278,7 +278,7 @@ def uninstall() -> None:
     target = opencode_dir()
     _remove_marker_block(target / "AGENTS.md")
     for path in [
-        target / "agents" / "klona-memory.md",
+        target / "agents" / LEGACY_AGENT_FILENAME,
         target / "plugins" / PLUGIN_FILENAME,
     ]:
         if path.exists():

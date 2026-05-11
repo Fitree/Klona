@@ -63,8 +63,8 @@ def assert_file_matches(expected, actual):
 def merge_fake_provider_config():
     config = json.loads(OPENCODE_CONFIG.read_text(encoding="utf-8"))
     mcp = config.get("mcp")
-    if not isinstance(mcp, dict) or "klona_memory_server" not in mcp:
-        raise SystemExit("installer did not preserve mcp.klona_memory_server before provider merge")
+    if not isinstance(mcp, dict) or "klona_memory" not in mcp:
+        raise SystemExit("installer did not preserve mcp.klona_memory before provider merge")
 
     provider = config.setdefault("provider", {})
     provider["fake"] = {
@@ -379,8 +379,8 @@ def verify_uninstall():
     if OPENCODE_CONFIG.exists():
         config = json.loads(OPENCODE_CONFIG.read_text(encoding="utf-8"))
         mcp = config.get("mcp")
-        if isinstance(mcp, dict) and "klona_memory_server" in mcp:
-            raise SystemExit("mcp.klona_memory_server remains after uninstall")
+        if isinstance(mcp, dict) and "klona_memory" in mcp:
+            raise SystemExit("mcp.klona_memory remains after uninstall")
 
 
 def reset_fake_provider_temp():
@@ -405,12 +405,9 @@ def main():
         phase("Verify installed files")
         require_file(OPENCODE_CONFIG_DIR / "AGENTS.md")
         require_file(OPENCODE_CONFIG)
-        require_file(OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md")
         require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js")
-        assert_file_matches(
-            "klona_agent/opencode/assets/agents/klona-memory.md",
-            OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
-        )
+        if (OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md").exists():
+            raise SystemExit("normal install should not install local klona-memory subagent")
         assert_file_matches(
             "klona_agent/opencode/assets/plugins/klona-memory-mental-model-injector.js",
             OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js",
