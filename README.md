@@ -70,7 +70,28 @@ docker compose down
 
 ### 2. Connect your local agent
 
-OpenCode is the currently supported local-agent integration.
+Choose one of two connection paths depending on how much local-agent support you want.
+
+#### MCP-only connection
+
+Use this path with any MCP-capable local agent or client that can connect to your Klona MCP server endpoint. Connect it to:
+
+```text
+http://localhost:32310/mcp
+```
+
+The MCP tools are:
+
+- `recall(input: str)`
+- `remember(input: str)`
+
+If you configured a bearer token during stack setup, use the same token in your MCP client. Leave the token empty only if your Klona MCP server was configured without one.
+
+This gives the agent basic memory tool access. It does not install any platform-specific Klona instructions, system prompt updates, or plugins.
+
+#### Full Klona integration
+
+Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and the mental-model plugin. OpenCode is currently the only supported full integration.
 
 Install or refresh the OpenCode integration:
 
@@ -86,7 +107,7 @@ http://localhost:32310/mcp
 
 For the bearer token, use the same Klona MCP token you configured during stack setup. Leave it empty if you left the token empty.
 
-Non-interactive install:
+Non-interactive install for the default stack:
 
 ```bash
 python install_agent.py --platform opencode \
@@ -114,3 +135,4 @@ See [`memory_server/README.md`](memory_server/README.md) for direct/admin implem
 
 - Expand platform compatibility beyond OpenCode while keeping one unified memory behavior.
 - Improve server-side agent memory refinement so queued memories are deduplicated, organized, and distilled automatically.
+- Add a knowledge graph dashboard for exploring the markdown memory vault visually.
