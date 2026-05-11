@@ -44,8 +44,8 @@ During setup you will see a few prompts:
 
 - **Klona MCP host port**: the localhost port where your agents connect to Klona. The default is `32310`, so the MCP URL becomes `http://localhost:32310/mcp`.
 - **Host markdown vault directory**: the folder on your machine where memory is stored as markdown. The default is `./vault`.
-- **Klona MCP bearer token**: an optional password for the MCP server. Leave it empty for local unauthenticated use; set a private value if other clients or machines may connect.
-- **Allowed hosts**: optional Host-header allowlist. Leave it empty for simple local setup; set a comma-separated list such as `localhost,127.0.0.1` if you want Host header checks.
+- **Klona MCP bearer token**: optional authentication token for the MCP server. Empty means no token is configured. When set, the MCP server requires this token for authentication.
+- **Allowed hosts**: optional Host-header allowlist. Empty means all Host headers are allowed. When set, only the comma-separated hosts you list, such as `localhost,127.0.0.1`, are accepted.
 - **OpenCode auth/model prompts**: the server-side memory agent currently runs through OpenCode, so the setup may ask whether to run OpenCode auth login and which model/reasoning effort to use.
 
 The script writes `.env`, builds the Docker images, starts the Klona MCP server, and runs the server-side memory agent. The memory agent may ask OpenCode auth/model prompts inside the container. Once healthy, the script detaches and leaves the stack running.
@@ -70,7 +70,7 @@ docker compose down
 
 ### 2. Connect your local agent
 
-Choose one of two connection paths depending on how much local-agent support you want.
+Choose one of two connection paths based on what gets installed in the local agent.
 
 #### MCP-only connection
 
@@ -85,9 +85,9 @@ The MCP tools are:
 - `recall(input: str)`
 - `remember(input: str)`
 
-If you configured a bearer token during stack setup, use the same token in your MCP client. Leave the token empty only if your Klona MCP server was configured without one.
+If you configured a bearer token during stack setup, set the same token in your MCP client. If the Klona MCP server has no token configured, the MCP client sends no bearer token.
 
-This gives the agent basic memory tool access. It does not install any platform-specific Klona instructions, system prompt updates, or plugins.
+This exposes only the `recall` and `remember` MCP tools to the agent. It does not install any platform-specific Klona instructions, system prompt updates, or plugins.
 
 #### Full Klona integration
 
@@ -105,7 +105,7 @@ When prompted, enter the Klona MCP URL for the default stack:
 http://localhost:32310/mcp
 ```
 
-For the bearer token, use the same Klona MCP token you configured during stack setup. Leave it empty if you left the token empty.
+For the bearer token, set the same Klona MCP token you configured during stack setup. If the Klona MCP server has no token configured, the OpenCode MCP config is written without a bearer token.
 
 Non-interactive install for the default stack:
 
