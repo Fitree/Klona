@@ -1,0 +1,14 @@
+{
+  "name": "klona-plugins",
+  "owner": {
+    "name": "Klona"
+  },
+  "plugins": [
+    {
+      "name": "klona-memory-plugin",
+      "source": "./",
+      "description": "Connect Claude Code to the Klona high-level memory MCP server.",
+      "version": "0.1.0"
+    }
+  ]
+}

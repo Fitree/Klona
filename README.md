@@ -91,7 +91,7 @@ This exposes only the `recall` and `remember` MCP tools to the agent. It does no
 
 #### Full Klona integration
 
-Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and the mental-model plugin. OpenCode is currently the only supported full integration.
+Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and mental-model/session-start behavior. OpenCode and Claude Code are supported full integrations.
 
 Install or refresh the OpenCode integration:
 
@@ -115,13 +115,39 @@ python install_agent.py --platform opencode \
   --klona-memory-server-token '<your-token>'
 ```
 
+For a no-auth non-interactive install, pass `--klona-memory-server-token ''` explicitly.
+
 Uninstall the OpenCode integration:
 
 ```bash
 python install_agent.py --uninstall --platform opencode
 ```
 
-Planned future integrations include Claude Code, Codex, Pi, and other agent platforms.
+Install or refresh the Claude Code integration:
+
+```bash
+python install_agent.py --platform claude
+```
+
+When prompted, enter the same Klona MCP URL and bearer token values described above. If the Klona MCP server has no token configured, the Claude Code MCP config is written without a bearer token.
+
+Non-interactive install for the default stack:
+
+```bash
+python install_agent.py --platform claude \
+  --klona-memory-server-url http://localhost:32310/mcp \
+  --klona-memory-server-token '<your-token>'
+```
+
+For a no-auth non-interactive install, pass `--klona-memory-server-token ''` explicitly.
+
+Uninstall the Claude Code integration:
+
+```bash
+python install_agent.py --uninstall --platform claude
+```
+
+Planned future integrations include Codex, Pi, and other agent platforms.
 
 ## Advanced implementation note
 
