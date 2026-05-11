@@ -7,6 +7,9 @@ import json
 import os
 import pty
 import select
+import signal
+import fcntl
+import struct
 import subprocess
 import sys
 import termios
@@ -114,20 +117,39 @@ def _status_to_return(status: int | None, detached: bool) -> tuple[int, bool]:
     return return_code, detached and return_code == 0
 
 
+def _copy_terminal_size_to_pty(source_fd: int, pty_fd: int) -> None:
+    """Copy the current terminal window size from source_fd to pty_fd when available."""
+    try:
+        window_size = fcntl.ioctl(source_fd, termios.TIOCGWINSZ, struct.pack("HHHH", 0, 0, 0, 0))
+        rows, columns, _, _ = struct.unpack("HHHH", window_size)
+        if rows == 0 or columns == 0:
+            return
+        fcntl.ioctl(pty_fd, termios.TIOCSWINSZ, window_size)
+    except OSError:
+        return
+
+
 def run_memory_agent_until_healthy(health_url: str) -> tuple[int, bool]:
     """Run memory-agent interactively and detach from the same container after health is ready."""
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print("Non-TTY detected; running memory-agent in blocking foreground mode without auto-detach.")
         return subprocess.call(RUN_MEMORY_AGENT_CMD, cwd=REPO_ROOT), False
 
+    stdin_fd = sys.stdin.fileno()
+    stdout_fd = sys.stdout.fileno()
     pid, master_fd = pty.fork()
     if pid == 0:
         os.chdir(REPO_ROOT)
         os.execvp(RUN_MEMORY_AGENT_CMD[0], RUN_MEMORY_AGENT_CMD)
 
-    stdin_fd = sys.stdin.fileno()
-    stdout_fd = sys.stdout.fileno()
+    _copy_terminal_size_to_pty(stdin_fd, master_fd)
     old_termios = termios.tcgetattr(stdin_fd)
+    old_sigwinch_handler = signal.getsignal(signal.SIGWINCH)
+
+    def handle_sigwinch(signum, frame):
+        _copy_terminal_size_to_pty(stdin_fd, master_fd)
+
+    signal.signal(signal.SIGWINCH, handle_sigwinch)
     detached = threading.Event()
     done = threading.Event()
     poller = threading.Thread(
@@ -163,6 +185,7 @@ def run_memory_agent_until_healthy(health_url: str) -> tuple[int, bool]:
                     os.write(master_fd, user_input)
     finally:
         done.set()
+        signal.signal(signal.SIGWINCH, old_sigwinch_handler)
         termios.tcsetattr(stdin_fd, termios.TCSADRAIN, old_termios)
         os.close(master_fd)
 

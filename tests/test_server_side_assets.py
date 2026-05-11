@@ -1,5 +1,6 @@
 import ast
 import importlib.util
+import struct
 from unittest import mock
 import unittest
 from pathlib import Path
@@ -197,6 +198,44 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("docker compose up -d memory-agent", script)
         self.assertNotIn('["docker", "compose", "up", "-d", "memory-agent"]', script)
         self.assertIn("Non-TTY detected; running memory-agent in blocking foreground mode without auto-detach.", script)
+
+    def test_init_copies_terminal_size_to_pty(self):
+        module = load_init_script_module()
+        window_size = struct.pack("HHHH", 40, 120, 0, 0)
+        calls = []
+
+        def fake_ioctl(fd, request, arg):
+            calls.append((fd, request, arg))
+            if request == module.termios.TIOCGWINSZ:
+                return window_size
+            return b""
+
+        with mock.patch.object(module.fcntl, "ioctl", side_effect=fake_ioctl):
+            module._copy_terminal_size_to_pty(10, 20)
+
+        self.assertEqual(calls[0], (10, module.termios.TIOCGWINSZ, struct.pack("HHHH", 0, 0, 0, 0)))
+        self.assertEqual(calls[1], (20, module.termios.TIOCSWINSZ, window_size))
+
+    def test_init_skips_invalid_terminal_size(self):
+        module = load_init_script_module()
+
+        with mock.patch.object(module.fcntl, "ioctl", return_value=struct.pack("HHHH", 0, 120, 0, 0)) as ioctl_mock:
+            module._copy_terminal_size_to_pty(10, 20)
+
+        self.assertEqual(ioctl_mock.call_count, 1)
+
+    def test_init_registers_and_restores_sigwinch_handler_for_pty(self):
+        script = (ROOT / "scripts" / "init_memory_stack.py").read_text()
+        fork_index = script.index("pty.fork()")
+        copy_index = script.index("_copy_terminal_size_to_pty(stdin_fd, master_fd)", fork_index)
+        signal_index = script.index("signal.signal(signal.SIGWINCH, handle_sigwinch)", copy_index)
+        restore_index = script.index("signal.signal(signal.SIGWINCH, old_sigwinch_handler)", signal_index)
+        close_index = script.index("os.close(master_fd)", restore_index)
+
+        self.assertLess(fork_index, copy_index)
+        self.assertLess(copy_index, signal_index)
+        self.assertLess(signal_index, restore_index)
+        self.assertLess(restore_index, close_index)
 
     def test_init_health_check_requires_memory_agent_identity(self):
         module = load_init_script_module()
