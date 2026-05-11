@@ -91,7 +91,7 @@ This exposes only the `recall` and `remember` MCP tools to the agent. It does no
 
 #### Full Klona integration
 
-Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and the mental-model plugin. OpenCode is currently the only supported full integration.
+Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and platform hooks/plugins for mental-model context. OpenCode and Codex are currently supported full integrations.
 
 Install or refresh the OpenCode integration:
 
@@ -121,7 +121,33 @@ Uninstall the OpenCode integration:
 python install_agent.py --uninstall --platform opencode
 ```
 
-Planned future integrations include Claude Code, Codex, Pi, and other agent platforms.
+Install or refresh the Codex integration:
+
+```bash
+python install_agent.py --platform codex
+```
+
+The Codex installer respects `$CODEX_HOME`, defaulting to `~/.codex`. It updates `$CODEX_HOME/AGENTS.md`, configures the `klona_memory` streamable HTTP MCP server in `$CODEX_HOME/config.toml`, enables Codex hooks, and installs a `UserPromptSubmit` hook in `$CODEX_HOME/hooks.json` to add Klona mental-model context when available.
+
+Non-interactive Codex install for the default stack:
+
+```bash
+python install_agent.py --platform codex \
+  --klona-memory-server-url http://localhost:32310/mcp \
+  --klona-memory-server-token '<your-token>'
+```
+
+If the Klona MCP server has no token configured, omit `--klona-memory-server-token` or pass it as an empty string.
+
+Uninstall the Codex integration:
+
+```bash
+python install_agent.py --uninstall --platform codex
+```
+
+Uninstall removes only Klona-managed Codex instructions, MCP config, and hook entries/assets while preserving unrelated user Codex configuration.
+
+Planned future integrations include Claude Code, Pi, and other agent platforms.
 
 ## Advanced implementation note
 
