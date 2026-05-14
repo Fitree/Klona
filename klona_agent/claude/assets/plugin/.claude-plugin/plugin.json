@@ -1,0 +1,9 @@
+{
+  "name": "klona-memory-plugin",
+  "description": "Klona high-level memory MCP tools and session context for Claude Code.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Klona"
+  },
+  "license": "MIT"
+}
