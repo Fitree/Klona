@@ -20,8 +20,9 @@ from .constants import (
     LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN,
     LOW_LEVEL_MCP_NAME,
     MEMORY_AGENT_NAME,
+    REM_SLEEP_AGENT_NAME,
 )
-from .system_prompt import MEMORY_AGENT_SYSTEM_PROMPT
+from .system_prompt import MEMORY_AGENT_SYSTEM_PROMPT, REM_SLEEP_SYSTEM_PROMPT
 
 
 ALLOWED_TOOL_PATTERN = LOW_LEVEL_MCP_ALLOWED_TOOL_PATTERN
@@ -192,9 +193,19 @@ def generate_opencode_config(settings: Settings, model: str = "", reasoning_effo
                 "prompt": MEMORY_AGENT_SYSTEM_PROMPT,
                 "permission": {
                     "*": "deny",
+                    "task": "allow",
                     ALLOWED_TOOL_PATTERN: "allow",
                 },
-            }
+            },
+            REM_SLEEP_AGENT_NAME: {
+                **agent_model_config,
+                "mode": "subagent",
+                "prompt": REM_SLEEP_SYSTEM_PROMPT,
+                "permission": {
+                    "*": "deny",
+                    ALLOWED_TOOL_PATTERN: "allow",
+                },
+            },
         },
         "mcp": {
             LOW_LEVEL_MCP_NAME: {
@@ -207,6 +218,7 @@ def generate_opencode_config(settings: Settings, model: str = "", reasoning_effo
         },
         "permission": {
             "*": "deny",
+            "task": "allow",
             ALLOWED_TOOL_PATTERN: "allow",
         },
     }

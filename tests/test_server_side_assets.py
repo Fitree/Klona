@@ -72,11 +72,24 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("HIGH_LEVEL_MCP_AUTH_TOKEN=\n", env)
         self.assertIn("Empty disables auth", env)
         self.assertIn("HIGH_LEVEL_MCP_HOST_PORT=32310", env)
+        self.assertIn("KLONA_REM_SLEEP_ENABLED=true", env)
+        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD=10", env)
+        self.assertIn("threshold <=0", env)
+        self.assertIn("/dashboard", env)
+        self.assertNotIn("/queue dashboard", env)
+
+    def test_docs_reference_dashboard_not_queue_route(self):
+        readme = (ROOT / "README.md").read_text()
+
+        self.assertIn("http://localhost:32310/dashboard", readme)
+        self.assertIn("/dashboard` first shows a browser token login form", readme)
+        self.assertNotIn("http://localhost:32310/queue", readme)
+        self.assertNotIn("`/queue`", readme)
 
     def test_compose_passes_empty_allowed_hosts_without_non_empty_fallbacks(self):
         compose = (ROOT / "docker-compose.yml").read_text()
         self.assertIn("HIGH_LEVEL_ALLOWED_HOSTS: ${HIGH_LEVEL_ALLOWED_HOSTS-}", compose)
-        self.assertIn('"${HIGH_LEVEL_MCP_HOST_PORT:-32310}:8080"', compose)
+        self.assertIn('"127.0.0.1:${HIGH_LEVEL_MCP_HOST_PORT:-32310}:8080"', compose)
         self.assertNotIn('"${HIGH_LEVEL_MCP_HOST_PORT:-32311}:8080"', compose)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS", compose)
         self.assertNotIn("LOW_LEVEL_ALLOWED_HOSTS:-localhost", compose)
@@ -94,6 +107,8 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("MEMORY_AGENT_QUEUE_DB: ${MEMORY_AGENT_QUEUE_DB:-/state/queue.db}", compose)
         self.assertIn("MEMORY_AGENT_TIMEOUT_SECONDS: ${MEMORY_AGENT_TIMEOUT_SECONDS:-600}", compose)
         self.assertIn("MEMORY_AGENT_MAX_RETRIES: ${MEMORY_AGENT_MAX_RETRIES:-2}", compose)
+        self.assertIn("KLONA_REM_SLEEP_ENABLED: ${KLONA_REM_SLEEP_ENABLED:-true}", compose)
+        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD: ${KLONA_REM_SLEEP_REMEMBER_THRESHOLD:-10}", compose)
 
     def test_compose_keeps_low_level_server_internal_only(self):
         compose = (ROOT / "docker-compose.yml").read_text()
@@ -137,20 +152,25 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn('"HIGH_LEVEL_MCP_AUTH_TOKEN": ""', script)
         self.assertIn("empty disables auth", script)
         self.assertIn('"HIGH_LEVEL_MCP_HOST_PORT": "32310"', script)
+        self.assertIn('"KLONA_REM_SLEEP_ENABLED": "true"', script)
+        self.assertIn('"KLONA_REM_SLEEP_REMEMBER_THRESHOLD": "10"', script)
+        self.assertIn("manual dashboard action still works", script)
 
     def test_init_collect_values_prompts_only_user_facing_settings(self):
         module = load_init_script_module()
-        answers = iter(["32312", "/tmp/vault", "token", "localhost,127.0.0.1"])
+        answers = iter(["32312", "/tmp/vault", "token", "localhost,127.0.0.1", "true", "7"])
 
         with mock.patch("builtins.input", side_effect=lambda prompt: next(answers)) as input_mock:
             values = module.collect_values()
 
-        self.assertEqual(input_mock.call_count, 4)
+        self.assertEqual(input_mock.call_count, 6)
         prompts = "\n".join(call.args[0] for call in input_mock.call_args_list)
         self.assertIn("High-level user-agent MCP host port", prompts)
         self.assertIn("Host markdown vault directory", prompts)
         self.assertIn("High-level user-agent MCP bearer token", prompts)
         self.assertIn("High-level allowed hosts", prompts)
+        self.assertIn("Automatic REM sleep enabled", prompts)
+        self.assertIn("Successful remember jobs before automatic REM sleep", prompts)
         self.assertNotIn("Memory-agent queue DB path in container", prompts)
         self.assertNotIn("Memory-agent state dir in container", prompts)
         self.assertNotIn("Recall timeout seconds", prompts)
@@ -162,6 +182,8 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertEqual(values["HOST_VAULT_DIR"], "/tmp/vault")
         self.assertEqual(values["HIGH_LEVEL_MCP_AUTH_TOKEN"], "token")
         self.assertEqual(values["HIGH_LEVEL_ALLOWED_HOSTS"], "localhost,127.0.0.1")
+        self.assertEqual(values["KLONA_REM_SLEEP_ENABLED"], "true")
+        self.assertEqual(values["KLONA_REM_SLEEP_REMEMBER_THRESHOLD"], "7")
         self.assertNotIn("MEMORY_AGENT_QUEUE_DB", values)
         self.assertNotIn("MEMORY_AGENT_STATE_DIR", values)
         self.assertNotIn("MEMORY_AGENT_TIMEOUT_SECONDS", values)
@@ -173,6 +195,8 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("MEMORY_AGENT_QUEUE_DB", generated_env)
         self.assertNotIn("MEMORY_AGENT_TIMEOUT_SECONDS", generated_env)
         self.assertNotIn("MEMORY_AGENT_MAX_RETRIES", generated_env)
+        self.assertIn("KLONA_REM_SLEEP_ENABLED=true", generated_env)
+        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD=7", generated_env)
 
     def test_init_command_sequence_is_guarded_for_interactive_memory_agent(self):
         script = (ROOT / "scripts" / "init_memory_stack.py").read_text()

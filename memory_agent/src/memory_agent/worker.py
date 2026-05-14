@@ -7,7 +7,7 @@ import logging
 
 from .config import load_settings, Settings
 from .opencode_client import OpenCodeClient, SharedSessionOpenCodeAgent
-from .prompts import recall_prompt, remember_prompt
+from .prompts import recall_prompt, remember_prompt, rem_sleep_prompt
 from .queue import MemoryQueue, QueueItem
 
 logger = logging.getLogger(__name__)
@@ -43,6 +43,11 @@ class MemoryWorker:
             logger.warning("memory queue item %s failed; status=%s error=%s", item.id, status, exc)
         else:
             self.queue.mark_succeeded(item.id, result)
+            if item.kind == "remember":
+                self.queue.record_successful_remember_and_maybe_enqueue_rem_sleep(
+                    self.settings.rem_sleep_enabled,
+                    self.settings.rem_sleep_remember_threshold,
+                )
         return True
 
     async def _process_item(self, item: QueueItem) -> str:
@@ -52,6 +57,8 @@ class MemoryWorker:
         if item.kind == "remember":
             await agent.ask(remember_prompt(item.input, self.settings))
             return ""
+        if item.kind == "rem_sleep":
+            return await agent.ask(rem_sleep_prompt(self.settings))
         raise ValueError(f"unknown queue item kind: {item.kind}")
 
     async def run_forever(self) -> None:

@@ -42,11 +42,12 @@ python3 scripts/init_memory_stack.py
 
 During setup you will see a few prompts:
 
-- **Klona MCP host port**: the localhost port where your agents connect to Klona. The default is `32310`, so the MCP URL becomes `http://localhost:32310/mcp`.
+- **Klona MCP host port**: the loopback-only localhost port where your agents connect to Klona. The default is `32310`, so the MCP URL becomes `http://localhost:32310/mcp`.
 - **Host markdown vault directory**: the folder on your machine where memory is stored as markdown. The default is `./vault`.
 - **Klona MCP bearer token**: optional authentication token for the MCP server. Empty means no token is configured. When set, the MCP server requires this token for authentication.
 - **Allowed hosts**: optional Host-header allowlist. Empty means all Host headers are allowed. When set, only the comma-separated hosts you list, such as `localhost,127.0.0.1`, are accepted.
 - **OpenCode auth/model prompts**: the server-side memory agent currently runs through OpenCode, so the setup may ask whether to run OpenCode auth login and which model/reasoning effort to use.
+- **REM sleep settings**: optional automatic vault-maintenance enqueueing after successful `remember` jobs. `KLONA_REM_SLEEP_REMEMBER_THRESHOLD=10` by default; set the threshold to `0` or less, or disable `KLONA_REM_SLEEP_ENABLED`, to turn off automatic REM sleep. Manual REM sleep from `/dashboard` still works.
 
 The script writes `.env`, builds the Docker images, starts the Klona MCP server, and runs the server-side memory agent. The memory agent may ask OpenCode auth/model prompts inside the container. Once healthy, the script detaches and leaves the stack running.
 
@@ -55,6 +56,16 @@ Verify the health endpoint:
 ```bash
 curl http://localhost:32310/health
 ```
+
+Inspect the FIFO queue dashboard, including pending `recall`, `remember`, and `rem-sleep` jobs:
+
+```text
+http://localhost:32310/dashboard
+```
+
+The dashboard is dependency-free server-rendered HTML intended for local/admin use. Compose binds it to loopback by default, and `/dashboard` rejects non-loopback Host headers unless explicitly allowed by `HIGH_LEVEL_ALLOWED_HOSTS`. It can append a manual REM sleep job to the end of the FIFO queue and delete only pending, not-started REM sleep jobs. Queue inputs are truncated in the table for safer inspection.
+
+If `HIGH_LEVEL_MCP_AUTH_TOKEN` is set, `/dashboard` first shows a browser token login form. A successful login stores an HttpOnly, SameSite dashboard session cookie derived from the configured token rather than the raw token. If no high-level token is configured, the local/admin dashboard remains usable and shows that dashboard auth is not configured.
 
 Default MCP endpoint for the root stack:
 
