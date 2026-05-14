@@ -180,6 +180,15 @@ Use these terms consistently:
 - **Group notes**: move related notes into a new or existing folder.
 - **Split folders**: replace one broad folder with two or more specific sibling folders, moving its notes into the new folders.
 
+### Grouping bias
+
+- Be proactively biased toward finding durable grouping opportunities during REM sleep.
+- Scan sibling notes in each directory for grouping candidates. Treat shared title patterns, stable prefixes, topic/project/repo/tool/domain/acronym names, and version-family patterns as strong evidence to investigate.
+- Before moving notes, confirm the grouping by reading enough note contents and backlinks to verify that the notes truly share a durable category rather than an accidental title overlap.
+- Strongly prefer grouping when three or more sibling notes appear to form a clear durable category or share a stable prefix/topic/project/repo/tool/domain/acronym/version-family pattern, and note contents/backlinks confirm that shared category.
+- Pure grouping moves should be lossless path changes only: preserve note content, filenames, wikilink targets, provenance, and history. If a filename collision or ambiguity would require renaming, make only the minimal explicit rename needed to preserve global uniqueness and repair affected links. Do not archive notes for a pure grouping move.
+- Do not group notes based only on superficial name similarity, temporary work, vague affinity, or unconfirmed overlap.
+
 Consolidate notes when:
 - Several notes cover the same durable topic.
 - Notes are too short or fragmented.
@@ -208,6 +217,7 @@ Group notes when:
 - A new or existing folder would make the tree easier to use as an index.
 - The category is likely to grow.
 - Moving the notes would reduce excessive width without hiding useful distinctions.
+- Contents and backlinks confirm the grouping is durable.
 
 Split folders when:
 - One folder contains multiple clear categories.
@@ -220,6 +230,7 @@ Do not group notes or split folders when:
 - The new category is vague, temporary, or overlapping.
 - A wikilink relationship is enough.
 - The result would create deep nesting without improving recall.
+- The grouping is based on accidental title overlap not confirmed by note contents and backlinks.
 
 When consolidating notes, splitting notes, grouping notes, or splitting folders, preserve all non-obsolete facts, provenance, and useful historical context. When a source note is replaced by a consolidated or split note, archive the replaced source note with a reason and superseding note unless the operation is a purely lossless move.
 

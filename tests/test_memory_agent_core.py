@@ -1345,6 +1345,21 @@ class PromptTests(unittest.TestCase):
         self.assertIn("low-level MCP tools", MEMORY_AGENT_SYSTEM_PROMPT)
         self.assertIn("delegate the actual maintenance to `klona-rem-sleep`", MEMORY_AGENT_SYSTEM_PROMPT)
 
+    def test_rem_sleep_prompt_requires_confirmed_three_plus_grouping(self):
+        from memory_agent.system_prompt import REM_SLEEP_SYSTEM_PROMPT
+
+        grouping_section = REM_SLEEP_SYSTEM_PROMPT.split("### Grouping bias", 1)[1].split("Consolidate notes when:", 1)[0]
+
+        self.assertIn("Scan sibling notes in each directory for grouping candidates", grouping_section)
+        self.assertIn("reading enough note contents and backlinks", grouping_section)
+        self.assertIn("three or more sibling notes", grouping_section)
+        self.assertIn("note contents/backlinks confirm", grouping_section)
+        self.assertIn("Do not archive notes for a pure grouping move", grouping_section)
+
+        overfit_examples = ["AIDenoise", "FI02", "Leo-OpenCode", "Klona", "OpenCode"]
+        for example in overfit_examples:
+            self.assertNotIn(example, grouping_section)
+
 
 if __name__ == "__main__":
     unittest.main()
