@@ -689,6 +689,70 @@ class MemoryWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(item.result, "REM_SLEEP_SUCCEEDED summary")
             self.assertIn("Delegate the actual maintenance to `klona-rem-sleep`", agent.prompts[0])
 
+    async def test_rem_sleep_worker_failure_does_not_retry_or_duplicate_request(self):
+        sys.modules.setdefault("httpx", types.SimpleNamespace(AsyncClient=object))
+        from memory_agent.config import Settings
+        from memory_agent.queue import MemoryQueue
+        from memory_agent.worker import MemoryWorker
+
+        class FailingAgent:
+            def __init__(self):
+                self.prompts = []
+
+            async def ask(self, prompt):
+                self.prompts.append(prompt)
+                raise TimeoutError("REM sleep timed out")
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            queue = MemoryQueue(Path(tempdir) / "queue.sqlite3")
+            item_id = queue.enqueue_rem_sleep("manual")
+            agent = FailingAgent()
+            worker = MemoryWorker(settings=Settings(queue_db_path=Path(tempdir) / "queue.sqlite3"), queue=queue, agent=agent)
+
+            first_processed = await worker.process_one()
+            item = queue.get(item_id)
+            second_processed = await worker.process_one()
+
+            self.assertTrue(first_processed)
+            self.assertEqual(item.status, "failed")
+            self.assertEqual(item.attempts, 1)
+            self.assertEqual(item.last_error, "REM sleep timed out")
+            self.assertFalse(second_processed)
+            self.assertEqual(len(agent.prompts), 1)
+
+    async def test_non_rem_worker_failure_retries_when_attempts_remain(self):
+        sys.modules.setdefault("httpx", types.SimpleNamespace(AsyncClient=object))
+        from memory_agent.config import Settings
+        from memory_agent.queue import MemoryQueue
+        from memory_agent.worker import MemoryWorker
+
+        class FailingAgent:
+            def __init__(self):
+                self.prompts = []
+
+            async def ask(self, prompt):
+                self.prompts.append(prompt)
+                raise TimeoutError("remember timed out")
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            queue = MemoryQueue(Path(tempdir) / "queue.sqlite3")
+            item_id = queue.enqueue("remember", "please store this")
+            agent = FailingAgent()
+            worker = MemoryWorker(
+                settings=Settings(queue_db_path=Path(tempdir) / "queue.sqlite3", max_retries=2),
+                queue=queue,
+                agent=agent,
+            )
+
+            processed = await worker.process_one()
+            item = queue.get(item_id)
+
+            self.assertTrue(processed)
+            self.assertEqual(item.status, "pending")
+            self.assertEqual(item.attempts, 1)
+            self.assertEqual(item.last_error, "remember timed out")
+            self.assertEqual(len(agent.prompts), 1)
+
     async def test_successful_remember_worker_counts_toward_rem_threshold(self):
         sys.modules.setdefault("httpx", types.SimpleNamespace(AsyncClient=object))
         from memory_agent.config import Settings
