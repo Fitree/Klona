@@ -75,6 +75,16 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("KLONA_REM_SLEEP_ENABLED=true", env)
         self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD=10", env)
         self.assertIn("threshold <=0", env)
+        self.assertIn("/dashboard", env)
+        self.assertNotIn("/queue dashboard", env)
+
+    def test_docs_reference_dashboard_not_queue_route(self):
+        readme = (ROOT / "README.md").read_text()
+
+        self.assertIn("http://localhost:32310/dashboard", readme)
+        self.assertIn("/dashboard` first shows a browser token login form", readme)
+        self.assertNotIn("http://localhost:32310/queue", readme)
+        self.assertNotIn("`/queue`", readme)
 
     def test_compose_passes_empty_allowed_hosts_without_non_empty_fallbacks(self):
         compose = (ROOT / "docker-compose.yml").read_text()

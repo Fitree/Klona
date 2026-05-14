@@ -133,6 +133,19 @@ class MemoryQueueTests(unittest.TestCase):
         self.assertEqual(claimed.id, processing_rem_id)
         self.assertFalse(queue.delete_pending_rem_sleep(processing_rem_id))
 
+    def test_status_counts_include_rows_beyond_default_list_limit(self):
+        queue = self.queue()
+        ids = [queue.enqueue("recall", f"item {index}") for index in range(205)]
+        with contextlib.closing(queue._connect()) as conn:
+            conn.execute("UPDATE queue_items SET status = 'processing' WHERE id = ?", (ids[200],))
+            conn.execute("UPDATE queue_items SET status = 'failed' WHERE id = ?", (ids[201],))
+
+        self.assertEqual(len(queue.list_items()), 200)
+        self.assertEqual(
+            queue.status_counts(),
+            {"total": 205, "pending": 203, "processing": 1, "succeeded": 0, "failed": 1},
+        )
+
     def test_retry_twice_then_marks_failed(self):
         queue = self.queue()
         item_id = queue.enqueue("recall", "retry me")
@@ -1081,10 +1094,12 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
         tool_names = [getattr(value, "__name__", "") for value in vars(self.server).values()]
 
         self.assertIn("/internal/mental-model", route_paths)
-        self.assertIn("/queue", route_paths)
+        self.assertIn("/dashboard", route_paths)
+        self.assertIn("/dashboard/login", route_paths)
+        self.assertNotIn("/queue", route_paths)
         self.assertNotIn("mental_model", tool_names)
 
-    async def test_queue_dashboard_get_and_rem_sleep_actions(self):
+    async def test_dashboard_get_and_rem_sleep_actions(self):
         from memory_agent.queue import MemoryQueue
 
         class FakeGetRequest:
@@ -1103,34 +1118,115 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
             self.server.queue = queue
             recall_id = queue.enqueue("recall", "find this " + ("x" * 400))
 
-            response = await self.server.queue_dashboard(FakeGetRequest())
+            response = await self.server.dashboard(FakeGetRequest())
             self.assertEqual(response.status_code, 200)
-            self.assertIn("KLONA FIFO Queue", response.body)
+            self.assertIn("KLONA dashboard", response.body)
             self.assertIn("find this", response.body)
             self.assertIn("[truncated", response.body)
             self.assertIn("Successful remembers since last REM enqueue", response.body)
+            self.assertIn("Dashboard auth is not configured", response.body)
 
-            redirect = await self.server.queue_action(FakeBodyRequest("action=enqueue_rem_sleep"))
+            redirect = await self.server.dashboard_action(FakeBodyRequest("action=enqueue_rem_sleep"))
             self.assertEqual(redirect.status_code, 303)
             rem_items = [item for item in queue.list_items() if item.kind == "rem_sleep"]
             self.assertEqual(len(rem_items), 1)
             self.assertFalse(queue.delete_pending_rem_sleep(recall_id))
 
-            await self.server.queue_action(FakeBodyRequest(f"action=delete_rem_sleep&id={rem_items[0].id}"))
+            await self.server.dashboard_action(FakeBodyRequest(f"action=delete_rem_sleep&id={rem_items[0].id}"))
             self.assertEqual([item.kind for item in queue.list_items()], ["recall"])
 
-    async def test_queue_post_rejects_cross_origin_request(self):
+    async def test_dashboard_summary_counts_include_rows_beyond_display_limit(self):
+        from memory_agent.queue import MemoryQueue
+
+        class FakeGetRequest:
+            headers = {"host": "localhost:32310"}
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            queue = MemoryQueue(Path(tempdir) / "queue.sqlite3")
+            self.server.queue = queue
+            ids = [queue.enqueue("recall", f"item {index}") for index in range(205)]
+            with contextlib.closing(queue._connect()) as conn:
+                conn.execute("UPDATE queue_items SET status = 'processing' WHERE id = ?", (ids[200],))
+                conn.execute("UPDATE queue_items SET status = 'failed' WHERE id = ?", (ids[201],))
+
+            response = await self.server.dashboard(FakeGetRequest())
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("<div class='card'><div class='muted'>Total jobs</div><div class='num'>205</div></div>", response.body)
+            self.assertIn("<div class='card'><div class='muted'>Pending</div><div class='num'>203</div></div>", response.body)
+            self.assertIn("<div class='card'><div class='muted'>Processing</div><div class='num'>1</div></div>", response.body)
+            self.assertIn("<div class='card'><div class='muted'>Failed</div><div class='num'>1</div></div>", response.body)
+
+    async def test_dashboard_post_rejects_cross_origin_request(self):
         class FakeBodyRequest:
             headers = {"host": "localhost:32310", "origin": "http://evil.example"}
 
             async def body(self):
                 return b"action=enqueue_rem_sleep"
 
-        response = await self.server.queue_action(FakeBodyRequest())
+        response = await self.server.dashboard_action(FakeBodyRequest())
 
         self.assertEqual(response.status_code, 403)
 
-    async def test_queue_routes_reject_non_loopback_host_and_accept_localhost(self):
+    async def test_dashboard_login_flow_uses_session_cookie_without_raw_token(self):
+        class FakeGetRequest:
+            def __init__(self, cookie=""):
+                self.headers = {"host": "localhost:32310"}
+                if cookie:
+                    self.headers["cookie"] = cookie
+
+        class FakeBodyRequest:
+            def __init__(self, body):
+                self._body = body.encode("utf-8")
+                self.headers = {"host": "localhost:32310", "origin": "http://localhost:32310"}
+
+            async def body(self):
+                return self._body
+
+        original_settings = self.server.settings
+        self.server.settings = type("Settings", (), {**vars(original_settings), "auth_token": "high-secret"})()
+        try:
+            login_page = await self.server.dashboard(FakeGetRequest())
+            self.assertEqual(login_page.status_code, 200)
+            self.assertIn("Enter the high-level MCP token", login_page.body)
+
+            rejected = await self.server.dashboard_login(FakeBodyRequest("token=wrong"))
+            self.assertEqual(rejected.status_code, 200)
+            self.assertIn("Invalid token", rejected.body)
+
+            accepted = await self.server.dashboard_login(FakeBodyRequest("token=high-secret"))
+            self.assertEqual(accepted.status_code, 303)
+            self.assertEqual(accepted.url, "/dashboard")
+            cookie = accepted.cookie
+            self.assertIn("klona_dashboard_session=", cookie)
+            self.assertIn("HttpOnly", cookie)
+            self.assertIn("SameSite=Lax", cookie)
+            self.assertNotIn("high-secret", cookie)
+
+            dashboard = await self.server.dashboard(FakeGetRequest(cookie))
+            self.assertEqual(dashboard.status_code, 200)
+            self.assertIn("FIFO queue and REM sleep controls", dashboard.body)
+            self.assertNotIn("Enter the high-level MCP token", dashboard.body)
+        finally:
+            self.server.settings = original_settings
+
+    async def test_dashboard_action_requires_login_when_token_configured(self):
+        class FakeBodyRequest:
+            headers = {"host": "localhost:32310", "origin": "http://localhost:32310"}
+
+            async def body(self):
+                return b"action=enqueue_rem_sleep"
+
+        original_settings = self.server.settings
+        self.server.settings = type("Settings", (), {**vars(original_settings), "auth_token": "high-secret"})()
+        try:
+            response = await self.server.dashboard_action(FakeBodyRequest())
+        finally:
+            self.server.settings = original_settings
+
+        self.assertEqual(response.status_code, 401)
+
+    async def test_dashboard_routes_reject_non_loopback_host_and_accept_localhost(self):
         class FakeGetRequest:
             def __init__(self, host):
                 self.headers = {"host": host}
@@ -1142,28 +1238,30 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
             async def body(self):
                 return b"action=enqueue_rem_sleep"
 
-        rejected_get = await self.server.queue_dashboard(FakeGetRequest("evil.example"))
-        rejected_post = await self.server.queue_action(FakeBodyRequest("evil.example"))
-        accepted_get = await self.server.queue_dashboard(FakeGetRequest("localhost:32310"))
+        rejected_get = await self.server.dashboard(FakeGetRequest("evil.example"))
+        rejected_post = await self.server.dashboard_action(FakeBodyRequest("evil.example"))
+        rejected_login = await self.server.dashboard_login(FakeBodyRequest("evil.example"))
+        accepted_get = await self.server.dashboard(FakeGetRequest("localhost:32310"))
 
         self.assertEqual(rejected_get.status_code, 403)
         self.assertEqual(rejected_post.status_code, 403)
+        self.assertEqual(rejected_login.status_code, 403)
         self.assertEqual(accepted_get.status_code, 200)
 
-    async def test_queue_host_allows_explicit_allowed_host(self):
+    async def test_dashboard_host_allows_explicit_allowed_host(self):
         class FakeGetRequest:
             headers = {"host": "admin.example"}
 
         original_settings = self.server.settings
         self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example",)})()
         try:
-            response = await self.server.queue_dashboard(FakeGetRequest())
+            response = await self.server.dashboard(FakeGetRequest())
         finally:
             self.server.settings = original_settings
 
         self.assertEqual(response.status_code, 200)
 
-    async def test_queue_host_with_explicit_allowed_port_requires_same_port(self):
+    async def test_dashboard_host_with_explicit_allowed_port_requires_same_port(self):
         class FakeGetRequest:
             def __init__(self, host):
                 self.headers = {"host": host}
@@ -1171,8 +1269,8 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
         original_settings = self.server.settings
         self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example:8443",)})()
         try:
-            accepted_response = await self.server.queue_dashboard(FakeGetRequest("admin.example:8443"))
-            rejected_response = await self.server.queue_dashboard(FakeGetRequest("admin.example:9999"))
+            accepted_response = await self.server.dashboard(FakeGetRequest("admin.example:8443"))
+            rejected_response = await self.server.dashboard(FakeGetRequest("admin.example:9999"))
         finally:
             self.server.settings = original_settings
 

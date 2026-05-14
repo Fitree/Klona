@@ -172,6 +172,18 @@ class MemoryQueue:
             rows = conn.execute("SELECT * FROM queue_items ORDER BY id ASC LIMIT ?", (limit,)).fetchall()
         return [self._row_to_item(row) for row in rows]
 
+    def status_counts(self) -> dict[str, int]:
+        counts = {"total": 0, "pending": 0, "processing": 0, "succeeded": 0, "failed": 0}
+        with contextlib.closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT status, COUNT(*) AS count FROM queue_items GROUP BY status"
+            ).fetchall()
+        for row in rows:
+            count = int(row["count"])
+            counts[str(row["status"])] = count
+            counts["total"] += count
+        return counts
+
     @staticmethod
     def _get_remember_count(conn: sqlite3.Connection) -> int:
         row = conn.execute("SELECT value FROM queue_state WHERE key = 'successful_remembers_since_rem_sleep'").fetchone()
