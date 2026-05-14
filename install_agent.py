@@ -13,8 +13,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--platform",
         required=True,
-        choices=["opencode"],
-        help="Target agent platform. Phase 1 supports only 'opencode'.",
+        choices=["opencode", "codex"],
+        help="Target agent platform.",
     )
     parser.add_argument(
         "--uninstall",
@@ -44,6 +44,15 @@ def main(argv: list[str] | None = None) -> int:
             opencode_installer.uninstall()
         else:
             opencode_installer.install(mcp_url=args.mcp_url, mcp_token=args.mcp_token)
+        return 0
+
+    if args.platform == "codex":
+        from klona_agent.codex import install as codex_installer
+
+        if args.uninstall:
+            codex_installer.uninstall()
+        else:
+            codex_installer.install(mcp_url=args.mcp_url, mcp_token=args.mcp_token)
         return 0
 
     raise AssertionError(f"unsupported platform reached argparse dispatch: {args.platform}")

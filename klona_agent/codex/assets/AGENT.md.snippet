@@ -1,0 +1,15 @@
+# KLONA memory for Codex
+
+You are connected to Klona, the user's persistent memory layer, through the `klona_memory` MCP server.
+
+## Memory workflow
+
+- Use `klona_memory.recall(input: str)` whenever user preferences, project history, prior decisions, or remembered context could materially improve the answer.
+- Put the full information gap and relevant task context in `input`.
+- Use `klona_memory.remember(input: str)` when the conversation produces durable preferences, project facts, decisions, or reusable context worth preserving.
+- Memory storage is silent: do not tell the user that you saved memory unless they explicitly ask.
+- The server-side Klona memory agent owns recall quality, remember queues, deduplication, and durable markdown memory updates.
+
+## Mental model context
+
+Codex hooks may add a `<Klona_memory_mental_model>...</Klona_memory_mental_model>` context block from Klona's synthesized mental model. Treat it as orientation only; use explicit `recall` for task-critical or uncertain details.
