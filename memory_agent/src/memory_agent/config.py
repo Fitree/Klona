@@ -14,6 +14,7 @@ from .constants import (
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_QUEUE_DB_PATH,
     DEFAULT_RECALL_TIMEOUT_SECONDS,
+    DEFAULT_REM_SLEEP_REMEMBER_THRESHOLD,
     DEFAULT_WORKER_IDLE_SLEEP_SECONDS,
 )
 
@@ -30,6 +31,13 @@ def _float_env(name: str, default: float) -> float:
     if raw is None or raw == "":
         return default
     return float(raw)
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _first_env(names: tuple[str, ...], default: str = "") -> str:
@@ -72,6 +80,8 @@ class Settings:
     opencode_base_url: str = field(default_factory=_opencode_base_url)
     opencode_model: str = field(default_factory=lambda: _first_env(("MEMORY_AGENT_MODEL", "OPENCODE_MODEL")))
     opencode_reasoning_effort: str = field(default_factory=lambda: _first_env(("MEMORY_AGENT_REASONING_EFFORT", "OPENCODE_REASONING_EFFORT")))
+    rem_sleep_enabled: bool = field(default_factory=lambda: _bool_env("KLONA_REM_SLEEP_ENABLED", True))
+    rem_sleep_remember_threshold: int = field(default_factory=lambda: _int_env("KLONA_REM_SLEEP_REMEMBER_THRESHOLD", DEFAULT_REM_SLEEP_REMEMBER_THRESHOLD))
     low_level_mcp_url: str = field(default_factory=lambda: os.environ.get("LOW_LEVEL_MCP_URL", ""))
     low_level_mcp_auth_token: str = field(default_factory=lambda: os.environ.get("LOW_LEVEL_MCP_AUTH_TOKEN", ""))
     opencode_config_path: Path = field(default_factory=lambda: Path(os.environ.get("OPENCODE_CONFIG_PATH", DEFAULT_OPENCODE_CONFIG_PATH)))

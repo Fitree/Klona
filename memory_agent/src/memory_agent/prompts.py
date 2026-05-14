@@ -23,3 +23,11 @@ If nothing should be stored or updated, do nothing.
 Input:
 {input_text}
 """
+
+
+def rem_sleep_prompt(settings: Settings) -> str:
+    _ = settings
+    return """Task: REM sleep maintenance request.
+Delegate the actual maintenance to `klona-rem-sleep`. Pass only this short instruction: "Do REM sleep following your instruction".
+Return the REM sleep summary as-is or briefly.
+"""

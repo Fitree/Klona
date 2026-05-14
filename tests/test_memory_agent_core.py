@@ -54,6 +54,7 @@ class MemoryQueueTests(unittest.TestCase):
         queue = self.queue()
         remember_id = queue.enqueue("remember", "store this")
         recall_id = queue.enqueue("recall", "find this")
+        rem_id = queue.enqueue_rem_sleep("rest")
 
         remember = queue.get(remember_id)
         recall = queue.get(recall_id)
@@ -65,6 +66,72 @@ class MemoryQueueTests(unittest.TestCase):
         self.assertEqual(recall.kind, "recall")
         self.assertEqual(recall.input, "find this")
         self.assertEqual(recall.status, "pending")
+        self.assertEqual(queue.get(rem_id).kind, "rem_sleep")
+        self.assertEqual(queue.get(rem_id).input, "rest")
+
+    def test_migrates_legacy_kind_check_to_allow_rem_sleep(self):
+        from memory_agent.queue import MemoryQueue
+        import sqlite3
+
+        db_path = Path(self.tempdir.name) / "queue.sqlite3"
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                """
+                CREATE TABLE queue_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind TEXT NOT NULL CHECK (kind IN ('recall', 'remember')),
+                    input TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'succeeded', 'failed')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    result TEXT,
+                    last_error TEXT,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    claimed_at REAL,
+                    completed_at REAL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO queue_items(kind, input, status, attempts, created_at, updated_at) VALUES ('recall', 'old', 'pending', 0, 1, 1)"
+            )
+
+        queue = MemoryQueue(db_path)
+        rem_id = queue.enqueue_rem_sleep("new rem")
+
+        self.assertEqual(queue.get(1).kind, "recall")
+        self.assertEqual(queue.get(rem_id).kind, "rem_sleep")
+
+    def test_successful_remember_threshold_enqueues_once_and_resets(self):
+        queue = self.queue()
+
+        self.assertIsNone(queue.record_successful_remember_and_maybe_enqueue_rem_sleep(True, 2))
+        rem_id = queue.record_successful_remember_and_maybe_enqueue_rem_sleep(True, 2)
+
+        self.assertIsNotNone(rem_id)
+        self.assertEqual(queue.get(rem_id).kind, "rem_sleep")
+        self.assertEqual(queue.remember_count_since_rem_sleep(), 0)
+        self.assertIsNone(queue.record_successful_remember_and_maybe_enqueue_rem_sleep(True, 2))
+        self.assertEqual([item.kind for item in queue.list_items()], ["rem_sleep"])
+
+    def test_manual_rem_sleep_resets_remember_count_and_delete_only_pending_rem_sleep(self):
+        queue = self.queue()
+        queue.record_successful_remember_and_maybe_enqueue_rem_sleep(True, 3)
+        rem_id = queue.enqueue_rem_sleep("manual")
+        recall_id = queue.enqueue("recall", "keep")
+
+        self.assertEqual(queue.remember_count_since_rem_sleep(), 0)
+        self.assertFalse(queue.delete_pending_rem_sleep(recall_id))
+        self.assertTrue(queue.delete_pending_rem_sleep(rem_id))
+        self.assertIsNone(queue.get(rem_id))
+
+        from memory_agent.queue import MemoryQueue
+
+        queue = MemoryQueue(Path(self.tempdir.name) / "processing.sqlite3")
+        processing_rem_id = queue.enqueue_rem_sleep("processing")
+        claimed = queue.claim_next()
+        self.assertEqual(claimed.id, processing_rem_id)
+        self.assertFalse(queue.delete_pending_rem_sleep(processing_rem_id))
 
     def test_retry_twice_then_marks_failed(self):
         queue = self.queue()
@@ -174,6 +241,17 @@ class OpenCodeConfigTests(unittest.TestCase):
             settings = Settings()
 
         self.assertEqual(settings.queue_db_path, Path(DEFAULT_QUEUE_DB_PATH))
+        self.assertTrue(settings.rem_sleep_enabled)
+        self.assertEqual(settings.rem_sleep_remember_threshold, 10)
+
+    def test_rem_sleep_threshold_env_parses_simple_disable_semantics(self):
+        from memory_agent.config import Settings
+
+        with mock.patch.dict(os.environ, {"KLONA_REM_SLEEP_ENABLED": "false", "KLONA_REM_SLEEP_REMEMBER_THRESHOLD": "0"}, clear=True):
+            settings = Settings()
+
+        self.assertFalse(settings.rem_sleep_enabled)
+        self.assertEqual(settings.rem_sleep_remember_threshold, 0)
 
     def test_opencode_base_url_uses_fixed_internal_default(self):
         from memory_agent.config import Settings
@@ -273,7 +351,7 @@ class OpenCodeConfigTests(unittest.TestCase):
 
     def test_generated_config_limits_permissions_to_low_level_memory_tools(self):
         from memory_agent.config import Settings
-        from memory_agent.constants import LOW_LEVEL_MCP_NAME, MEMORY_AGENT_NAME
+        from memory_agent.constants import LOW_LEVEL_MCP_NAME, MEMORY_AGENT_NAME, REM_SLEEP_AGENT_NAME
         from memory_agent.runtime import ALLOWED_TOOL_PATTERN, generate_opencode_config
 
         with tempfile.TemporaryDirectory() as tempdir:
@@ -293,7 +371,7 @@ class OpenCodeConfigTests(unittest.TestCase):
             data["mcp"][LOW_LEVEL_MCP_NAME]["headers"],
             {"Authorization": "Bearer low-secret"},
         )
-        self.assertEqual(data["permission"], {"*": "deny", ALLOWED_TOOL_PATTERN: "allow"})
+        self.assertEqual(data["permission"], {"*": "deny", "task": "allow", ALLOWED_TOOL_PATTERN: "allow"})
         self.assertNotIn("variant", data)
         self.assertNotIn("reasoningEffort", data)
         self.assertEqual(data["agent"][MEMORY_AGENT_NAME]["variant"], "high")
@@ -307,8 +385,12 @@ class OpenCodeConfigTests(unittest.TestCase):
         self.assertIn("Storage gating", prompt)
         self.assertEqual(
             data["agent"][MEMORY_AGENT_NAME]["permission"],
-            {"*": "deny", ALLOWED_TOOL_PATTERN: "allow"},
+            {"*": "deny", "task": "allow", ALLOWED_TOOL_PATTERN: "allow"},
         )
+        self.assertIn(REM_SLEEP_AGENT_NAME, data["agent"])
+        self.assertEqual(data["agent"][REM_SLEEP_AGENT_NAME]["mode"], "subagent")
+        self.assertIn("REM sleep maintenance", data["agent"][REM_SLEEP_AGENT_NAME]["prompt"])
+        self.assertEqual(data["agent"][REM_SLEEP_AGENT_NAME]["permission"], {"*": "deny", ALLOWED_TOOL_PATTERN: "allow"})
         serialized_permissions = json.dumps(data["agent"][MEMORY_AGENT_NAME]["permission"])
         for dangerous in ["bash", "shell", "edit", "filesystem"]:
             self.assertNotIn(dangerous, serialized_permissions.lower())
@@ -565,6 +647,60 @@ class OpenCodeClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("model", payload)
 
 
+class MemoryWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rem_sleep_worker_routes_prompt_to_memory_agent(self):
+        sys.modules.setdefault("httpx", types.SimpleNamespace(AsyncClient=object))
+        from memory_agent.config import Settings
+        from memory_agent.queue import MemoryQueue
+        from memory_agent.worker import MemoryWorker
+
+        class FakeAgent:
+            def __init__(self):
+                self.prompts = []
+
+            async def ask(self, prompt):
+                self.prompts.append(prompt)
+                return "REM_SLEEP_SUCCEEDED summary"
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            queue = MemoryQueue(Path(tempdir) / "queue.sqlite3")
+            item_id = queue.enqueue_rem_sleep("manual")
+            agent = FakeAgent()
+            worker = MemoryWorker(settings=Settings(queue_db_path=Path(tempdir) / "queue.sqlite3"), queue=queue, agent=agent)
+
+            processed = await worker.process_one()
+            item = queue.get(item_id)
+
+            self.assertTrue(processed)
+            self.assertEqual(item.status, "succeeded")
+            self.assertEqual(item.result, "REM_SLEEP_SUCCEEDED summary")
+            self.assertIn("Delegate the actual maintenance to `klona-rem-sleep`", agent.prompts[0])
+
+    async def test_successful_remember_worker_counts_toward_rem_threshold(self):
+        sys.modules.setdefault("httpx", types.SimpleNamespace(AsyncClient=object))
+        from memory_agent.config import Settings
+        from memory_agent.queue import MemoryQueue
+        from memory_agent.worker import MemoryWorker
+
+        class FakeAgent:
+            async def ask(self, prompt):
+                return "ok"
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            queue = MemoryQueue(Path(tempdir) / "queue.sqlite3")
+            queue.enqueue("remember", "one")
+            worker = MemoryWorker(
+                settings=Settings(queue_db_path=Path(tempdir) / "queue.sqlite3", rem_sleep_remember_threshold=1),
+                queue=queue,
+                agent=FakeAgent(),
+            )
+
+            processed = await worker.process_one()
+
+            self.assertTrue(processed)
+            self.assertEqual([item.kind for item in queue.list_items()], ["remember", "rem_sleep"])
+
+
 class MentalModelClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_low_level_client_initializes_notifies_and_extracts_exact_content(self):
         from memory_agent.config import Settings
@@ -764,6 +900,16 @@ def install_fake_server_dependencies():
             self.body = body
             self.status_code = status_code
 
+    class FakeHTMLResponse:
+        def __init__(self, body, status_code=200):
+            self.body = body
+            self.status_code = status_code
+
+    class FakeRedirectResponse:
+        def __init__(self, url, status_code=307):
+            self.url = url
+            self.status_code = status_code
+
     modules = {
         "mcp": types.ModuleType("mcp"),
         "mcp.server": types.ModuleType("mcp.server"),
@@ -781,7 +927,9 @@ def install_fake_server_dependencies():
     modules["starlette.applications"].Starlette = FakeStarlette
     modules["starlette.middleware"].Middleware = FakeMiddleware
     modules["starlette.requests"].Request = object
+    modules["starlette.responses"].HTMLResponse = FakeHTMLResponse
     modules["starlette.responses"].JSONResponse = FakeJSONResponse
+    modules["starlette.responses"].RedirectResponse = FakeRedirectResponse
     modules["starlette.responses"].Response = object
     modules["starlette.routing"].Mount = lambda *args, **kwargs: ("mount", args, kwargs)
     modules["starlette.routing"].Route = lambda *args, **kwargs: ("route", args, kwargs)
@@ -933,7 +1081,103 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
         tool_names = [getattr(value, "__name__", "") for value in vars(self.server).values()]
 
         self.assertIn("/internal/mental-model", route_paths)
+        self.assertIn("/queue", route_paths)
         self.assertNotIn("mental_model", tool_names)
+
+    async def test_queue_dashboard_get_and_rem_sleep_actions(self):
+        from memory_agent.queue import MemoryQueue
+
+        class FakeGetRequest:
+            headers = {"host": "localhost:32310"}
+
+        class FakeBodyRequest:
+            def __init__(self, body, host="localhost:32310", origin="http://localhost:32310"):
+                self._body = body.encode("utf-8")
+                self.headers = {"host": host, "origin": origin}
+
+            async def body(self):
+                return self._body
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            queue = MemoryQueue(Path(tempdir) / "queue.sqlite3")
+            self.server.queue = queue
+            recall_id = queue.enqueue("recall", "find this " + ("x" * 400))
+
+            response = await self.server.queue_dashboard(FakeGetRequest())
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("KLONA FIFO Queue", response.body)
+            self.assertIn("find this", response.body)
+            self.assertIn("[truncated", response.body)
+            self.assertIn("Successful remembers since last REM enqueue", response.body)
+
+            redirect = await self.server.queue_action(FakeBodyRequest("action=enqueue_rem_sleep"))
+            self.assertEqual(redirect.status_code, 303)
+            rem_items = [item for item in queue.list_items() if item.kind == "rem_sleep"]
+            self.assertEqual(len(rem_items), 1)
+            self.assertFalse(queue.delete_pending_rem_sleep(recall_id))
+
+            await self.server.queue_action(FakeBodyRequest(f"action=delete_rem_sleep&id={rem_items[0].id}"))
+            self.assertEqual([item.kind for item in queue.list_items()], ["recall"])
+
+    async def test_queue_post_rejects_cross_origin_request(self):
+        class FakeBodyRequest:
+            headers = {"host": "localhost:32310", "origin": "http://evil.example"}
+
+            async def body(self):
+                return b"action=enqueue_rem_sleep"
+
+        response = await self.server.queue_action(FakeBodyRequest())
+
+        self.assertEqual(response.status_code, 403)
+
+    async def test_queue_routes_reject_non_loopback_host_and_accept_localhost(self):
+        class FakeGetRequest:
+            def __init__(self, host):
+                self.headers = {"host": host}
+
+        class FakeBodyRequest:
+            def __init__(self, host):
+                self.headers = {"host": host, "origin": f"http://{host}"}
+
+            async def body(self):
+                return b"action=enqueue_rem_sleep"
+
+        rejected_get = await self.server.queue_dashboard(FakeGetRequest("evil.example"))
+        rejected_post = await self.server.queue_action(FakeBodyRequest("evil.example"))
+        accepted_get = await self.server.queue_dashboard(FakeGetRequest("localhost:32310"))
+
+        self.assertEqual(rejected_get.status_code, 403)
+        self.assertEqual(rejected_post.status_code, 403)
+        self.assertEqual(accepted_get.status_code, 200)
+
+    async def test_queue_host_allows_explicit_allowed_host(self):
+        class FakeGetRequest:
+            headers = {"host": "admin.example"}
+
+        original_settings = self.server.settings
+        self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example",)})()
+        try:
+            response = await self.server.queue_dashboard(FakeGetRequest())
+        finally:
+            self.server.settings = original_settings
+
+        self.assertEqual(response.status_code, 200)
+
+    async def test_queue_host_with_explicit_allowed_port_requires_same_port(self):
+        class FakeGetRequest:
+            def __init__(self, host):
+                self.headers = {"host": host}
+
+        original_settings = self.server.settings
+        self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example:8443",)})()
+        try:
+            accepted_response = await self.server.queue_dashboard(FakeGetRequest("admin.example:8443"))
+            rejected_response = await self.server.queue_dashboard(FakeGetRequest("admin.example:9999"))
+        finally:
+            self.server.settings = original_settings
+
+        self.assertEqual(accepted_response.status_code, 200)
+        self.assertEqual(rejected_response.status_code, 403)
 
 
 class LowLevelServerAuthTests(unittest.TestCase):
@@ -985,12 +1229,23 @@ class PromptTests(unittest.TestCase):
         self.assertNotIn("vault_tree", prompt)
         self.assertNotIn("Storage gating", prompt)
 
+    def test_rem_sleep_prompt_routes_through_memory_agent_delegation(self):
+        from memory_agent.config import Settings
+        from memory_agent.prompts import rem_sleep_prompt
+
+        prompt = rem_sleep_prompt(Settings())
+
+        self.assertIn("Delegate", prompt)
+        self.assertIn("klona-rem-sleep", prompt)
+        self.assertIn("Do REM sleep following your instruction", prompt)
+
     def test_system_prompt_contains_exact_file_content_behavior(self):
         from memory_agent.system_prompt import MEMORY_AGENT_SYSTEM_PROMPT
 
         self.assertIn("exact current file content", MEMORY_AGENT_SYSTEM_PROMPT)
         self.assertIn("content verbatim without semantic summarization", MEMORY_AGENT_SYSTEM_PROMPT)
         self.assertIn("low-level MCP tools", MEMORY_AGENT_SYSTEM_PROMPT)
+        self.assertIn("delegate the actual maintenance to `klona-rem-sleep`", MEMORY_AGENT_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

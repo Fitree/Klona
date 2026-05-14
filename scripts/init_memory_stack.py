@@ -28,6 +28,8 @@ ENV_ORDER = (
     "HIGH_LEVEL_MCP_HOST_PORT",
     "HIGH_LEVEL_MCP_AUTH_TOKEN",
     "HIGH_LEVEL_ALLOWED_HOSTS",
+    "KLONA_REM_SLEEP_ENABLED",
+    "KLONA_REM_SLEEP_REMEMBER_THRESHOLD",
 )
 
 DEFAULTS = {
@@ -35,6 +37,8 @@ DEFAULTS = {
     "HIGH_LEVEL_MCP_HOST_PORT": "32310",
     "HIGH_LEVEL_MCP_AUTH_TOKEN": "",
     "HIGH_LEVEL_ALLOWED_HOSTS": "",
+    "KLONA_REM_SLEEP_ENABLED": "true",
+    "KLONA_REM_SLEEP_REMEMBER_THRESHOLD": "10",
 }
 
 
@@ -205,6 +209,13 @@ def collect_values() -> dict[str, str]:
         "HIGH_LEVEL_MCP_AUTH_TOKEN": _ask("High-level user-agent MCP bearer token (empty disables auth)", DEFAULTS["HIGH_LEVEL_MCP_AUTH_TOKEN"]),
         "HIGH_LEVEL_ALLOWED_HOSTS": _ask(
             "High-level allowed hosts (empty allows all Host headers)", DEFAULTS["HIGH_LEVEL_ALLOWED_HOSTS"]
+        ),
+        "KLONA_REM_SLEEP_ENABLED": _ask(
+            "Automatic REM sleep enabled (true/false; manual dashboard action still works)", DEFAULTS["KLONA_REM_SLEEP_ENABLED"]
+        ),
+        "KLONA_REM_SLEEP_REMEMBER_THRESHOLD": _ask(
+            "Successful remember jobs before automatic REM sleep (<=0 disables automatic REM)",
+            DEFAULTS["KLONA_REM_SLEEP_REMEMBER_THRESHOLD"],
         ),
     }
 

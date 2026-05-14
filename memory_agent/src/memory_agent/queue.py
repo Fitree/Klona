@@ -10,7 +10,7 @@ import sqlite3
 import time
 from typing import Any, Literal
 
-QueueKind = Literal["recall", "remember"]
+QueueKind = Literal["recall", "remember", "rem_sleep"]
 QueueStatus = Literal["pending", "processing", "succeeded", "failed"]
 
 
@@ -23,6 +23,7 @@ class QueueItem:
     attempts: int
     created_at: float
     updated_at: float
+    completed_at: float | None = None
     last_error: str | None = None
     result: str | None = None
 
@@ -46,26 +47,67 @@ class MemoryQueue:
 
     def init_db(self) -> None:
         with contextlib.closing(self._connect()) as conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS queue_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    kind TEXT NOT NULL CHECK (kind IN ('recall', 'remember')),
-                    input TEXT NOT NULL,
-                    status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'succeeded', 'failed')),
-                    attempts INTEGER NOT NULL DEFAULT 0,
-                    result TEXT,
-                    last_error TEXT,
-                    created_at REAL NOT NULL,
-                    updated_at REAL NOT NULL,
-                    claimed_at REAL,
-                    completed_at REAL
-                )
-                """
-            )
+            self._ensure_queue_items_table(conn)
+            self._ensure_state_table(conn)
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_queue_claim ON queue_items(status, id)"
             )
+
+    def _ensure_queue_items_table(self, conn: sqlite3.Connection) -> None:
+        desired_sql = """
+            CREATE TABLE queue_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN ('recall', 'remember', 'rem_sleep')),
+                input TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'succeeded', 'failed')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                result TEXT,
+                last_error TEXT,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                claimed_at REAL,
+                completed_at REAL
+            )
+        """
+        row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'queue_items'").fetchone()
+        if row is None:
+            conn.execute(desired_sql)
+            return
+        existing_sql = str(row["sql"] or "")
+        if "'rem_sleep'" in existing_sql and "completed_at" in existing_sql:
+            return
+        conn.execute("ALTER TABLE queue_items RENAME TO queue_items_old")
+        conn.execute(desired_sql)
+        old_columns = {column[1] for column in conn.execute("PRAGMA table_info(queue_items_old)").fetchall()}
+        claimed_expr = "claimed_at" if "claimed_at" in old_columns else "NULL"
+        completed_expr = "completed_at" if "completed_at" in old_columns else "NULL"
+        conn.execute(
+            f"""
+            INSERT INTO queue_items(id, kind, input, status, attempts, result, last_error, created_at, updated_at, claimed_at, completed_at)
+            SELECT id,
+                   kind,
+                   input, status, attempts, result, last_error, created_at, updated_at, {claimed_expr}, {completed_expr}
+            FROM queue_items_old
+            WHERE kind IN ('recall', 'remember', 'rem_sleep')
+            """
+        )
+        conn.execute("DROP TABLE queue_items_old")
+
+    def _ensure_state_table(self, conn: sqlite3.Connection) -> None:
+        now = time.time()
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS queue_state (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO queue_state(key, value, updated_at) VALUES ('successful_remembers_since_rem_sleep', '0', ?)",
+            (now,),
+        )
 
     def enqueue(self, kind: QueueKind, input_text: str) -> int:
         now = time.time()
@@ -78,6 +120,75 @@ class MemoryQueue:
                 (kind, input_text, now, now),
             )
             return int(cur.lastrowid)
+
+    def enqueue_rem_sleep(self, input_text: str = "Manual REM sleep request") -> int:
+        now = time.time()
+        with contextlib.closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cur = conn.execute(
+                """
+                INSERT INTO queue_items(kind, input, status, attempts, created_at, updated_at)
+                VALUES ('rem_sleep', ?, 'pending', 0, ?, ?)
+                """,
+                (input_text, now, now),
+            )
+            self._set_remember_count(conn, 0, now)
+            conn.execute("COMMIT")
+            return int(cur.lastrowid)
+
+    def record_successful_remember_and_maybe_enqueue_rem_sleep(self, enabled: bool, threshold: int) -> int | None:
+        if not enabled or threshold <= 0:
+            return None
+        now = time.time()
+        with contextlib.closing(self._connect()) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            count = self._get_remember_count(conn) + 1
+            if count < threshold:
+                self._set_remember_count(conn, count, now)
+                conn.execute("COMMIT")
+                return None
+            cur = conn.execute(
+                """
+                INSERT INTO queue_items(kind, input, status, attempts, created_at, updated_at)
+                VALUES ('rem_sleep', ?, 'pending', 0, ?, ?)
+                """,
+                (f"Automatic REM sleep after {threshold} successful remember jobs", now, now),
+            )
+            self._set_remember_count(conn, 0, now)
+            conn.execute("COMMIT")
+            return int(cur.lastrowid)
+
+    def remember_count_since_rem_sleep(self) -> int:
+        with contextlib.closing(self._connect()) as conn:
+            return self._get_remember_count(conn)
+
+    def delete_pending_rem_sleep(self, item_id: int) -> bool:
+        with contextlib.closing(self._connect()) as conn:
+            cur = conn.execute("DELETE FROM queue_items WHERE id = ? AND kind = 'rem_sleep' AND status = 'pending' AND attempts = 0", (item_id,))
+            return int(cur.rowcount) == 1
+
+    def list_items(self, limit: int = 200) -> list[QueueItem]:
+        with contextlib.closing(self._connect()) as conn:
+            rows = conn.execute("SELECT * FROM queue_items ORDER BY id ASC LIMIT ?", (limit,)).fetchall()
+        return [self._row_to_item(row) for row in rows]
+
+    @staticmethod
+    def _get_remember_count(conn: sqlite3.Connection) -> int:
+        row = conn.execute("SELECT value FROM queue_state WHERE key = 'successful_remembers_since_rem_sleep'").fetchone()
+        if row is None:
+            return 0
+        return int(row["value"])
+
+    @staticmethod
+    def _set_remember_count(conn: sqlite3.Connection, count: int, now: float) -> None:
+        conn.execute(
+            """
+            INSERT INTO queue_state(key, value, updated_at)
+            VALUES ('successful_remembers_since_rem_sleep', ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (str(count), now),
+        )
 
     def claim_next(self, processing_lease_seconds: float = 600.0, max_retries: int | None = None) -> QueueItem | None:
         """Atomically claim the oldest available item without bypassing FIFO.
@@ -207,6 +318,7 @@ class MemoryQueue:
             attempts=int(row["attempts"]),
             created_at=float(row["created_at"]),
             updated_at=float(row["updated_at"]),
+            completed_at=(float(row["completed_at"]) if row["completed_at"] is not None else None),
             last_error=row["last_error"],
             result=row["result"],
         )
