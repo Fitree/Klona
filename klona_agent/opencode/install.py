@@ -17,6 +17,7 @@ END_MARKER = "</Klona_Memory>"
 LEGACY_BEGIN_MARKER = "<!-- KLONA:BEGIN -->"
 LEGACY_END_MARKER = "<!-- KLONA:END -->"
 MCP_NAME = "klona_memory"
+KLONA_MEMORY_MCP_TIMEOUT_MS = 1_000_000
 
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
@@ -112,6 +113,7 @@ def _mcp_entry(url: str, token: str) -> dict[str, Any]:
         "url": url,
         "enabled": True,
         "oauth": False,
+        "timeout": KLONA_MEMORY_MCP_TIMEOUT_MS,
     }
     if token:
         entry["headers"] = {"Authorization": f"Bearer {token}"}

@@ -152,6 +152,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
                 "url": "https://memory.example/mcp",
                 "enabled": True,
                 "oauth": False,
+                "timeout": 1_000_000,
                 "headers": {"Authorization": "Bearer abc123"},
             },
         )
@@ -216,6 +217,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         getpass_mock.assert_called_once_with("Klona high-level memory bearer token (empty disables auth): ")
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://prompted.example/mcp")
+        self.assertEqual(entry["timeout"], 1_000_000)
         self.assertEqual(entry["headers"]["Authorization"], "Bearer prompt-token")
 
     def test_install_with_empty_prompted_token_omits_authorization_header(self):
@@ -234,6 +236,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         getpass_mock.assert_not_called()
         entry = self.read_config()["mcp"][installer.MCP_NAME]
         self.assertEqual(entry["url"], "https://args.example/mcp")
+        self.assertEqual(entry["timeout"], 1_000_000)
         self.assertEqual(entry["headers"]["Authorization"], "Bearer arg-token")
 
     def test_install_with_empty_url_arg_raises_system_exit(self):
