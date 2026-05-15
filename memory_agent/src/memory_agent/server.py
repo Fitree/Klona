@@ -108,40 +108,20 @@ def _display_input(input_text: str, limit: int = 300) -> str:
     return input_text[:limit] + f"... [truncated {len(input_text) - limit} chars]"
 
 
-def _hostname_from_host_header(host_header: str) -> str:
-    host = host_header.strip().lower()
-    if host.startswith("["):
-        end = host.find("]")
-        if end != -1:
-            return host[1:end]
-    if ":" in host:
-        return host.rsplit(":", 1)[0]
-    return host
-
-
-def _host_entry_includes_port(host_entry: str) -> bool:
-    host = host_entry.strip().lower()
-    if host.startswith("["):
-        end = host.find("]")
-        return end != -1 and host[end + 1 :].startswith(":")
-    return ":" in host
-
-
 def _dashboard_host_allowed(request: Request) -> bool:
+    if not settings.allowed_hosts:
+        return True
     host_header = request.headers.get("host", "")
     if not host_header:
         return False
     normalized_host_header = host_header.strip().lower()
-    hostname = _hostname_from_host_header(normalized_host_header)
-    if hostname in {"localhost", "127.0.0.1", "::1"}:
-        return True
     for allowed_host in settings.allowed_hosts:
         allowed = allowed_host.strip().lower()
         if not allowed:
             continue
         if normalized_host_header == allowed:
             return True
-        if not _host_entry_includes_port(allowed) and hostname == _hostname_from_host_header(allowed):
+        if allowed.endswith(":*") and normalized_host_header.startswith(allowed[:-1]):
             return True
     return False
 

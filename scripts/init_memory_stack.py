@@ -208,7 +208,7 @@ def collect_values() -> dict[str, str]:
         "HIGH_LEVEL_MCP_HOST_PORT": high_port,
         "HIGH_LEVEL_MCP_AUTH_TOKEN": _ask("High-level user-agent MCP bearer token (empty disables auth)", DEFAULTS["HIGH_LEVEL_MCP_AUTH_TOKEN"]),
         "HIGH_LEVEL_ALLOWED_HOSTS": _ask(
-            "High-level allowed hosts for dashboard/external access (comma-separated; include external host/IP)",
+            "High-level allowed hosts for MCP/dashboard (empty allows all; narrow for external access)",
             DEFAULTS["HIGH_LEVEL_ALLOWED_HOSTS"],
         ),
         "KLONA_REM_SLEEP_ENABLED": _ask(
