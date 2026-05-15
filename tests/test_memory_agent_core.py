@@ -255,7 +255,7 @@ class OpenCodeConfigTests(unittest.TestCase):
 
         self.assertEqual(settings.queue_db_path, Path(DEFAULT_QUEUE_DB_PATH))
         self.assertTrue(settings.rem_sleep_enabled)
-        self.assertEqual(settings.rem_sleep_remember_threshold, 10)
+        self.assertEqual(settings.rem_sleep_remember_threshold, 20)
 
     def test_rem_sleep_threshold_env_parses_simple_disable_semantics(self):
         from memory_agent.config import Settings
