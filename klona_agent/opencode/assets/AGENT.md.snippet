@@ -32,33 +32,37 @@ Use this goal as the basis for judging the recall and store decisions below.
 
 ### Mandatory continuous memory workflow
 
-```
-User Input
-   │
-   ▼
-[Initial recall decision]
-   ├─ yes ─▶ Recall workflow ─┐
-   └─ no  ───────────────────┤
-                              ▼
-                         Process input
-                              │
-                              ▼
-┌─ Repeat before each decision/action until ready to answer ─┐
-│ [New durable-memory gap?]                                  │
-│    ├─ yes ─▶ Recall workflow ─┐                            │
-│    └─ no  ───────────────────┤                            │
-│                               ▼                            │
-│                 Continue processing / deciding / acting    │
-│                               │                            │
-│                               └────── repeat if needed ────┘
-└────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                       [Store decision]
-                         ├─ yes ─▶ Store pipeline (background) ─┐
-                         └─ no  ────────────────────────────────┤
-                                                                 ▼
-                                                           Return answer
+Use these numbered rules as the source of truth:
+
+1. Read the user input.
+2. Make the initial recall decision.
+3. If recall is needed, run the recall workflow, then process the input.
+4. If recall is not needed, process the input.
+5. Before each meaningful decision or action, check whether there is a new durable-memory gap.
+6. If the gap could affect the next action, run the recall workflow, then continue processing, deciding, or acting.
+7. Repeat the gap check and any needed recall until ready to answer.
+8. Make the store decision.
+9. If store is needed, run the store pipeline in the background.
+10. Return the answer.
+
+Visual aid only:
+
+```mermaid
+flowchart TD
+    A[Read user input] --> B{Initial recall decision}
+    B -- Recall needed --> C[Recall workflow]
+    B -- No recall needed --> D[Process input]
+    C --> D
+    D --> E{Before next meaningful decision/action:<br/>new durable-memory gap?}
+    E -- Gap could affect next action --> F[Recall workflow]
+    F --> G[Continue processing / deciding / acting]
+    E -- No relevant gap --> G
+    G --> H{Ready to answer?}
+    H -- No --> E
+    H -- Yes --> I{Store decision}
+    I -- Store needed --> J[Store pipeline in background]
+    I -- No store needed --> K[Return answer]
+    J --> K
 ```
 
 ### Recall decision

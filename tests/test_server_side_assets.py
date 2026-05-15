@@ -369,6 +369,18 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("If exploration, file reads, tool results, errors, clarifications", snippet)
         self.assertIn("new information gap that durable memory could fill", snippet)
 
+    def test_opencode_snippet_workflow_uses_numbered_rules_and_mermaid(self):
+        snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
+        workflow = snippet.split("### Mandatory continuous memory workflow", 1)[1].split("### Recall decision", 1)[0]
+        self.assertIn("Use these numbered rules as the source of truth", workflow)
+        self.assertIn("1. Read the user input.", workflow)
+        self.assertIn("Before each meaningful decision or action", workflow)
+        self.assertIn("```mermaid", workflow)
+        self.assertIn("flowchart TD", workflow)
+        self.assertNotIn("│", workflow)
+        self.assertNotIn("┌", workflow)
+        self.assertNotIn("└", workflow)
+
     def test_opencode_snippet_recalls_before_decisions_and_actions(self):
         snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
         self.assertIn("Recall before decisions or actions", snippet)
