@@ -303,6 +303,19 @@ class MemoryQueue:
             conn.execute("COMMIT")
             return status
 
+    def mark_failed(self, item_id: int, error: str) -> None:
+        """Mark an item failed without scheduling a retry."""
+        now = time.time()
+        with contextlib.closing(self._connect()) as conn:
+            conn.execute(
+                """
+                UPDATE queue_items
+                SET status = 'failed', last_error = ?, updated_at = ?, claimed_at = NULL, completed_at = ?
+                WHERE id = ?
+                """,
+                (error, now, now, item_id),
+            )
+
     def get(self, item_id: int) -> QueueItem | None:
         with contextlib.closing(self._connect()) as conn:
             row = conn.execute("SELECT * FROM queue_items WHERE id = ?", (item_id,)).fetchone()

@@ -39,7 +39,11 @@ class MemoryWorker:
         try:
             result = await self._process_item(item)
         except Exception as exc:  # noqa: BLE001 - failures are persisted for retry/accounting.
-            status = self.queue.mark_failed_or_retry(item.id, str(exc), self.settings.max_retries)
+            if item.kind == "rem_sleep":
+                self.queue.mark_failed(item.id, str(exc))
+                status = "failed"
+            else:
+                status = self.queue.mark_failed_or_retry(item.id, str(exc), self.settings.max_retries)
             logger.warning("memory queue item %s failed; status=%s error=%s", item.id, status, exc)
         else:
             self.queue.mark_succeeded(item.id, result)
