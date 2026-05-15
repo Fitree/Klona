@@ -1290,7 +1290,7 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 401)
 
-    async def test_dashboard_routes_reject_non_loopback_host_and_accept_localhost(self):
+    async def test_dashboard_routes_allow_any_host_when_allowed_hosts_empty(self):
         class FakeGetRequest:
             def __init__(self, host):
                 self.headers = {"host": host}
@@ -1302,28 +1302,49 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
             async def body(self):
                 return b"action=enqueue_rem_sleep"
 
-        rejected_get = await self.server.dashboard(FakeGetRequest("evil.example"))
-        rejected_post = await self.server.dashboard_action(FakeBodyRequest("evil.example"))
-        rejected_login = await self.server.dashboard_login(FakeBodyRequest("evil.example"))
-        accepted_get = await self.server.dashboard(FakeGetRequest("localhost:32310"))
+        accepted_external_get = await self.server.dashboard(FakeGetRequest("evil.example"))
+        accepted_post = await self.server.dashboard_action(FakeBodyRequest("evil.example"))
+        accepted_login = await self.server.dashboard_login(FakeBodyRequest("evil.example"))
+        accepted_local_get = await self.server.dashboard(FakeGetRequest("localhost:32310"))
+        accepted_external_port_get = await self.server.dashboard(FakeGetRequest("admin.example:32310"))
 
-        self.assertEqual(rejected_get.status_code, 403)
-        self.assertEqual(rejected_post.status_code, 403)
-        self.assertEqual(rejected_login.status_code, 403)
-        self.assertEqual(accepted_get.status_code, 200)
+        self.assertEqual(accepted_external_get.status_code, 200)
+        self.assertEqual(accepted_post.status_code, 303)
+        self.assertEqual(accepted_login.status_code, 303)
+        self.assertEqual(accepted_local_get.status_code, 200)
+        self.assertEqual(accepted_external_port_get.status_code, 200)
 
-    async def test_dashboard_host_allows_explicit_allowed_host(self):
+    async def test_dashboard_routes_reject_unlisted_hosts_when_allowed_hosts_non_empty(self):
         class FakeGetRequest:
-            headers = {"host": "admin.example"}
+            def __init__(self, host):
+                self.headers = {"host": host}
 
         original_settings = self.server.settings
         self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example",)})()
         try:
-            response = await self.server.dashboard(FakeGetRequest())
+            external_response = await self.server.dashboard(FakeGetRequest("evil.example"))
+            local_response = await self.server.dashboard(FakeGetRequest("localhost:32310"))
         finally:
             self.server.settings = original_settings
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(external_response.status_code, 403)
+        self.assertEqual(local_response.status_code, 403)
+
+    async def test_dashboard_host_allows_explicit_allowed_host(self):
+        class FakeGetRequest:
+            def __init__(self, host):
+                self.headers = {"host": host}
+
+        original_settings = self.server.settings
+        self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example",)})()
+        try:
+            accepted_response = await self.server.dashboard(FakeGetRequest("admin.example"))
+            rejected_response = await self.server.dashboard(FakeGetRequest("admin.example:32310"))
+        finally:
+            self.server.settings = original_settings
+
+        self.assertEqual(accepted_response.status_code, 200)
+        self.assertEqual(rejected_response.status_code, 403)
 
     async def test_dashboard_host_with_explicit_allowed_port_requires_same_port(self):
         class FakeGetRequest:
@@ -1335,6 +1356,22 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
         try:
             accepted_response = await self.server.dashboard(FakeGetRequest("admin.example:8443"))
             rejected_response = await self.server.dashboard(FakeGetRequest("admin.example:9999"))
+        finally:
+            self.server.settings = original_settings
+
+        self.assertEqual(accepted_response.status_code, 200)
+        self.assertEqual(rejected_response.status_code, 403)
+
+    async def test_dashboard_host_with_wildcard_port_requires_same_host(self):
+        class FakeGetRequest:
+            def __init__(self, host):
+                self.headers = {"host": host}
+
+        original_settings = self.server.settings
+        self.server.settings = type("Settings", (), {**vars(original_settings), "allowed_hosts": ("admin.example:*",)})()
+        try:
+            accepted_response = await self.server.dashboard(FakeGetRequest("admin.example:32310"))
+            rejected_response = await self.server.dashboard(FakeGetRequest("evil.example:32310"))
         finally:
             self.server.settings = original_settings
 
