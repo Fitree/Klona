@@ -17,7 +17,7 @@ Use this goal as the basis for judging the recall and store decisions below.
 ### Session-start Klona memory mental model injection
 
 - `KLONA_MEMORY_MENTAL_MODEL.md` is a synthesized, high-level model of the user and working context derived from Klona memory.
-- At session start, it is prepended into the first user message inside a `<Klona_memory_mental_model>...</Klona_memory_mental_model>` wrapper to provide orientation and initial context, not to replace normal memory recall when additional retrieval is needed.
+- At session start, it is prepended into the first user message inside a `<Klona_memory_mental_model>...</Klona_memory_mental_model>` wrapper to provide orientation and initial context. Treat it as an orientation cache, not a substitute for recall; still use `recall(input: str)` whenever durable context could matter.
 
 ### `klona_memory` MCP tools
 
@@ -30,15 +30,18 @@ Use this goal as the basis for judging the recall and store decisions below.
 - The server-side memory-agent maintains its own working context and queue.
 - Route retrieval and storage through the same high-level `klona_memory` MCP endpoint so server-side continuity is preserved.
 
-### Mandatory per-turn memory workflow
+### Mandatory continuous memory workflow
 
 ```
 User Input
    │
    ▼
-[Recall decision]──yes──▶ Recall workflow ──▶ Process input
-   │                                              │
-   └──no──▶ Process input ◀──────────────────────┘
+[Initial recall decision]──yes──▶ Recall workflow ──▶ Process input
+   │                                                      │
+   └──no──▶ Process input ◀──────────────────────────────┘
+                  │
+                  ▼
+ [Repeat recall decisions before decisions or actions if new gaps appear]
                   │
                   ▼
          [Store decision]──yes──▶ Store pipeline (background) ──▶ Return answer
@@ -48,8 +51,15 @@ User Input
 
 ### Recall decision
 
-- Highly confident that the current context is sufficient to process user's request, set **False** (do not recall).
-- Otherwise, set to **True** (do recall)
+- Default to **True** (do recall) whenever there is any uncertainty about whether user preferences, project history, prior decisions, relevant context, or intent from durable memory could affect the response.
+- Set **False** (do not recall) only when highly confident the current turn and visible context are sufficient, and the work is purely local or mechanical, and independent of stored user/project context.
+- Make an initial recall decision after reading the user input, then keep making recall decisions during the turn.
+
+### Mid-turn recall decision
+
+- If exploration, file reads, tool results, errors, clarifications, or newly discovered facts reveal a new information gap that durable memory could fill, call `recall(input: str)` before choosing a direction.
+- Recall before decisions or actions when the missing context could affect what you edit, run, recommend, skip, prioritize, or tell the user.
+- Do not rely on the session-start mental model as a substitute for recall when a newly discovered gap could affect action.
 
 ### Recall workflow
 

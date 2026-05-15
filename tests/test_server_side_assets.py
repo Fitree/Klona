@@ -354,6 +354,33 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertNotIn("KLONA MCP", snippet)
         self.assertNotIn("Do **not** delegate memory work to a local `klona-memory` subagent", snippet)
 
+    def test_opencode_snippet_defaults_to_aggressive_recall_under_uncertainty(self):
+        snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
+        self.assertIn("Default to **True** (do recall) whenever there is any uncertainty", snippet)
+        self.assertIn("durable memory could affect the response", snippet)
+        self.assertIn("Set **False** (do not recall) only when highly confident", snippet)
+        self.assertIn("purely local or mechanical, and independent of stored user/project context", snippet)
+
+    def test_opencode_snippet_requires_mid_turn_recall_for_new_gaps(self):
+        snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
+        self.assertIn("### Mandatory continuous memory workflow", snippet)
+        self.assertIn("then keep making recall decisions during the turn", snippet)
+        self.assertIn("### Mid-turn recall decision", snippet)
+        self.assertIn("If exploration, file reads, tool results, errors, clarifications", snippet)
+        self.assertIn("new information gap that durable memory could fill", snippet)
+
+    def test_opencode_snippet_recalls_before_decisions_and_actions(self):
+        snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
+        self.assertIn("Recall before decisions or actions", snippet)
+        self.assertIn("could affect what you edit, run, recommend, skip, prioritize, or tell the user", snippet)
+        self.assertIn("before choosing a direction", snippet)
+
+    def test_opencode_snippet_treats_mental_model_as_orientation_cache_only(self):
+        snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
+        self.assertIn("KLONA_MEMORY_MENTAL_MODEL.md", snippet)
+        self.assertIn("Treat it as an orientation cache, not a substitute for recall", snippet)
+        self.assertIn("Do not rely on the session-start mental model as a substitute for recall", snippet)
+
 
 if __name__ == "__main__":
     unittest.main()
