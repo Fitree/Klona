@@ -42,10 +42,10 @@ python3 scripts/init_memory_stack.py
 
 During setup you will see a few prompts:
 
-- **Klona MCP host port**: the loopback-only localhost port where your agents connect to Klona. The default is `32310`, so the MCP URL becomes `http://localhost:32310/mcp`.
+- **Klona MCP host port**: the host port where your agents connect to Klona. The default is `32310`, so local agents use `http://localhost:32310/mcp` and remote agents can use `http://<server-host-or-ip>:32310/mcp` when your network/firewall permits it.
 - **Host markdown vault directory**: the folder on your machine where memory is stored as markdown. The default is `./vault`.
-- **Klona MCP bearer token**: optional authentication token for the MCP server. Empty means no token is configured. When set, the MCP server requires this token for authentication.
-- **Allowed hosts**: optional Host-header allowlist. Empty means all Host headers are allowed. When set, only the comma-separated hosts you list, such as `localhost,127.0.0.1`, are accepted.
+- **Klona MCP bearer token**: optional authentication token for the MCP server. Empty means no token is configured. When set, the MCP server requires this token for authentication. Set a private token before exposing Klona beyond localhost.
+- **Allowed hosts**: optional Host-header allowlist. Include every host clients will use, such as `localhost,127.0.0.1,klona.example.com,klona.example.com:32310,203.0.113.10,203.0.113.10:32310`. The admin dashboard accepts loopback hosts by default; external dashboard access requires the external host/IP, or host/IP plus port, in `HIGH_LEVEL_ALLOWED_HOSTS`.
 - **OpenCode auth/model prompts**: the server-side memory agent currently runs through OpenCode, so the setup may ask whether to run OpenCode auth login and which model/reasoning effort to use.
 - **REM sleep settings**: optional automatic vault-maintenance enqueueing after successful `remember` jobs. `KLONA_REM_SLEEP_REMEMBER_THRESHOLD=10` by default; set the threshold to `0` or less, or disable `KLONA_REM_SLEEP_ENABLED`, to turn off automatic REM sleep. Manual REM sleep from `/dashboard` still works.
 
@@ -63,7 +63,7 @@ Inspect the FIFO queue dashboard, including pending `recall`, `remember`, and `r
 http://localhost:32310/dashboard
 ```
 
-The dashboard is dependency-free server-rendered HTML intended for local/admin use. Compose binds it to loopback by default, and `/dashboard` rejects non-loopback Host headers unless explicitly allowed by `HIGH_LEVEL_ALLOWED_HOSTS`. It can append a manual REM sleep job to the end of the FIFO queue and delete only pending, not-started REM sleep jobs. Queue inputs are truncated in the table for safer inspection.
+The dashboard is dependency-free server-rendered HTML intended for local/admin use. Compose publishes the high-level MCP service on the configured host port, and `/dashboard` rejects non-loopback Host headers unless explicitly allowed by `HIGH_LEVEL_ALLOWED_HOSTS`. For external dashboard access, set `HIGH_LEVEL_ALLOWED_HOSTS` to include the external hostname/IP clients use, and include `:32310` when you want to require that exact Host header port. It can append a manual REM sleep job to the end of the FIFO queue and delete only pending, not-started REM sleep jobs. Queue inputs are truncated in the table for safer inspection.
 
 If `HIGH_LEVEL_MCP_AUTH_TOKEN` is set, `/dashboard` first shows a browser token login form. A successful login stores an HttpOnly, SameSite dashboard session cookie derived from the configured token rather than the raw token. If no high-level token is configured, the local/admin dashboard remains usable and shows that dashboard auth is not configured.
 
