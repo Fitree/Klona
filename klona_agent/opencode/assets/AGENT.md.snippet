@@ -36,17 +36,29 @@ Use this goal as the basis for judging the recall and store decisions below.
 User Input
    │
    ▼
-[Initial recall decision]──yes──▶ Recall workflow ──▶ Process input
-   │                                                      │
-   └──no──▶ Process input ◀──────────────────────────────┘
-                  │
-                  ▼
- [Repeat recall decisions before decisions or actions if new gaps appear]
-                  │
-                  ▼
-         [Store decision]──yes──▶ Store pipeline (background) ──▶ Return answer
-                  │                                                    ▲
-                  └──no────────────────────────────────────────────────┘
+[Initial recall decision]
+   ├─ yes ─▶ Recall workflow ─┐
+   └─ no  ───────────────────┤
+                              ▼
+                         Process input
+                              │
+                              ▼
+┌─ Repeat before each decision/action until ready to answer ─┐
+│ [New durable-memory gap?]                                  │
+│    ├─ yes ─▶ Recall workflow ─┐                            │
+│    └─ no  ───────────────────┤                            │
+│                               ▼                            │
+│                 Continue processing / deciding / acting    │
+│                               │                            │
+│                               └────── repeat if needed ────┘
+└────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                       [Store decision]
+                         ├─ yes ─▶ Store pipeline (background) ─┐
+                         └─ no  ────────────────────────────────┤
+                                                                 ▼
+                                                           Return answer
 ```
 
 ### Recall decision
