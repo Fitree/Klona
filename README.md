@@ -12,6 +12,8 @@ The new direction is server-side: Klona should become **your working memory for 
 
 - **Wiki-style knowledge base**: Memory lives in an inspectable markdown vault with ordinary files, directories, and `[[wikilinks]]`.
 - **Server-side memory agent**: Local/user-side agents call your Klona MCP server, while the server-side agent owns working context, recall, remember queues, duplicate checks, and memory refinement.
+- **REM sleep maintenance**: Automatic or manual REM sleep jobs give the vault a deeper maintenance pass, keeping recently captured memories organized and useful.
+- **Local/admin dashboard**: `/dashboard` lets you inspect recall, remember, and REM sleep queues, trigger manual REM sleep jobs, and remove pending REM sleep jobs.
 - **Unified cross-platform experience**: The same memory agent is designed to serve multiple agent platforms, so changing clients does not mean changing what your assistant remembers.
 - **User-owned memory server**: Memory is your asset, your leverage, and your control plane. The server, vault, tokens, and access boundaries are under your control rather than locked inside one assistant product.
 
