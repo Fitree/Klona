@@ -73,7 +73,7 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("Empty disables auth", env)
         self.assertIn("HIGH_LEVEL_MCP_HOST_PORT=32310", env)
         self.assertIn("KLONA_REM_SLEEP_ENABLED=true", env)
-        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD=10", env)
+        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD=20", env)
         self.assertIn("threshold <=0", env)
         self.assertIn("/dashboard", env)
         self.assertNotIn("/queue dashboard", env)
@@ -108,7 +108,7 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("MEMORY_AGENT_TIMEOUT_SECONDS: ${MEMORY_AGENT_TIMEOUT_SECONDS:-600}", compose)
         self.assertIn("MEMORY_AGENT_MAX_RETRIES: ${MEMORY_AGENT_MAX_RETRIES:-2}", compose)
         self.assertIn("KLONA_REM_SLEEP_ENABLED: ${KLONA_REM_SLEEP_ENABLED:-true}", compose)
-        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD: ${KLONA_REM_SLEEP_REMEMBER_THRESHOLD:-10}", compose)
+        self.assertIn("KLONA_REM_SLEEP_REMEMBER_THRESHOLD: ${KLONA_REM_SLEEP_REMEMBER_THRESHOLD:-20}", compose)
 
     def test_compose_keeps_low_level_server_internal_only(self):
         compose = (ROOT / "docker-compose.yml").read_text()
@@ -153,7 +153,7 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("empty disables auth", script)
         self.assertIn('"HIGH_LEVEL_MCP_HOST_PORT": "32310"', script)
         self.assertIn('"KLONA_REM_SLEEP_ENABLED": "true"', script)
-        self.assertIn('"KLONA_REM_SLEEP_REMEMBER_THRESHOLD": "10"', script)
+        self.assertIn('"KLONA_REM_SLEEP_REMEMBER_THRESHOLD": "20"', script)
         self.assertIn("manual dashboard action still works", script)
 
     def test_init_collect_values_prompts_only_user_facing_settings(self):

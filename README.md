@@ -47,7 +47,7 @@ During setup you will see a few prompts:
 - **Klona MCP bearer token**: optional authentication token for the MCP server. Empty means no token is configured. When set, the MCP server requires this token for authentication.
 - **Allowed hosts**: optional Host-header allowlist. Empty means all Host headers are allowed. When set, only the comma-separated hosts you list, such as `localhost,127.0.0.1`, are accepted.
 - **OpenCode auth/model prompts**: the server-side memory agent currently runs through OpenCode, so the setup may ask whether to run OpenCode auth login and which model/reasoning effort to use.
-- **REM sleep settings**: optional automatic vault-maintenance enqueueing after successful `remember` jobs. `KLONA_REM_SLEEP_REMEMBER_THRESHOLD=10` by default; set the threshold to `0` or less, or disable `KLONA_REM_SLEEP_ENABLED`, to turn off automatic REM sleep. Manual REM sleep from `/dashboard` still works.
+- **REM sleep settings**: optional automatic vault-maintenance enqueueing after successful `remember` jobs. `KLONA_REM_SLEEP_REMEMBER_THRESHOLD=20` by default; set the threshold to `0` or less, or disable `KLONA_REM_SLEEP_ENABLED`, to turn off automatic REM sleep. Manual REM sleep from `/dashboard` still works.
 
 The script writes `.env`, builds the Docker images, starts the Klona MCP server, and runs the server-side memory agent. The memory agent may ask OpenCode auth/model prompts inside the container. Once healthy, the script detaches and leaves the stack running.
 
