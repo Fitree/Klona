@@ -22,6 +22,7 @@ from .config import load_settings
 from .constants import MCP_HEALTH_SERVER_NAME, MCP_SERVER_NAME
 from .mental_model import LowLevelMcpMentalModelClient, MentalModelMissingError
 from .queue import MemoryQueue
+from .skills import LowLevelMcpVaultSkillsClient, SkillValidationError
 
 logger = logging.getLogger(__name__)
 settings = load_settings()
@@ -88,6 +89,40 @@ async def recall(input: str) -> dict:
     if item.status == "failed":
         return {"status": "failed", "id": item_id, "error": item.last_error or "unknown_error"}
     return {"status": "timeout", "id": item_id, "timeout_seconds": settings.recall_timeout_seconds}
+
+
+@mcp.tool()
+async def list_skills() -> dict:
+    """Return a compact deterministic catalog of vault-native skills."""
+    try:
+        return await LowLevelMcpVaultSkillsClient(settings).list_skills()
+    except Exception as error:
+        logger.warning("Failed to list vault-native skills", exc_info=True)
+        return {"status": "error", "error": str(error)}
+
+
+@mcp.tool()
+async def load_skill(name: str) -> dict:
+    """Load a vault-native skill from /skills/<skill-name>/SKILL.md."""
+    try:
+        return await LowLevelMcpVaultSkillsClient(settings).load_skill(name)
+    except SkillValidationError as error:
+        return {"status": "invalid", "name": name, "error": str(error)}
+    except Exception as error:
+        logger.warning("Failed to load vault-native skill", exc_info=True)
+        return {"status": "error", "name": name, "error": str(error)}
+
+
+@mcp.tool()
+async def load_skill_resource(skill_name: str, path: str) -> dict:
+    """Load a resource path inside a vault-native skill directory."""
+    try:
+        return await LowLevelMcpVaultSkillsClient(settings).load_skill_resource(skill_name, path)
+    except SkillValidationError as error:
+        return {"status": "invalid", "skill_name": skill_name, "path": path, "error": str(error)}
+    except Exception as error:
+        logger.warning("Failed to load vault-native skill resource", exc_info=True)
+        return {"status": "error", "skill_name": skill_name, "path": path, "error": str(error)}
 
 
 def _format_time(timestamp: float | None) -> str:
@@ -339,6 +374,24 @@ async def internal_mental_model(request: Request) -> Response:
     return JSONResponse({"status": "ok", "content": content})
 
 
+async def internal_skills(request: Request) -> Response:
+    """Return compact auto-active vault-native skill catalog for injection."""
+    try:
+        catalog = await LowLevelMcpVaultSkillsClient(settings).list_skills()
+    except Exception as error:
+        logger.warning("Failed to read vault-native skill catalog", exc_info=True)
+        return JSONResponse({"status": "error", "skills": [], "error": str(error)}, status_code=502)
+    if catalog.get("status") == "ok" and "content" not in catalog:
+        lines = []
+        for skill in catalog.get("skills", []):
+            name = skill.get("name")
+            description = skill.get("description")
+            if isinstance(name, str) and isinstance(description, str):
+                lines.append(f"- {name}: {description}")
+        catalog = {**catalog, "content": "\n".join(lines)}
+    return JSONResponse(catalog)
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: Starlette):
     async with mcp.session_manager.run():
@@ -353,6 +406,7 @@ app = Starlette(
         Route("/dashboard/login", dashboard_login, methods=["POST"]),
         Route("/dashboard/logout", dashboard_logout, methods=["POST"]),
         Route("/internal/mental-model", internal_mental_model),
+        Route("/internal/skills", internal_skills),
         Mount("/", app=mcp.streamable_http_app()),
     ],
     lifespan=lifespan,

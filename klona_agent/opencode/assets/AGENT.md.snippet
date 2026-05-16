@@ -19,11 +19,19 @@ Use this goal as the basis for judging the recall and store decisions below.
 - `KLONA_MEMORY_MENTAL_MODEL.md` is a synthesized, high-level model of the user and working context derived from Klona memory.
 - At session start, it is prepended into the first user message inside a `<Klona_memory_mental_model>...</Klona_memory_mental_model>` wrapper to provide orientation and initial context. Treat it as an orientation cache, not a substitute for recall; still use `recall(input: str)` whenever durable context could matter.
 
+### Session-start vault skill catalog injection
+
+- A compact vault-native skill catalog may also be prepended into the first user message inside a `<Klona_vault_skills>...</Klona_vault_skills>` wrapper.
+- Treat the injected catalog as awareness only, not as full skill instructions.
+- Before applying a relevant vault skill, call the high-level `load_skill(name: str)` MCP tool to load its full instructions.
+- If the loaded skill references resources, lazily call `load_skill_resource(skill_name: str, path: str)` only when the resource is needed.
+
 ### `klona_memory` MCP tools
 
 - Use the configured `klona_memory` high-level MCP tools for **all** memory operations.
 - Call `recall(input: str)` for retrieval. Put the full information gap and relevant task context in `input`.
 - Call `remember(input: str)` for storage. Put the complete candidate memory context in `input`.
+- Call `load_skill(name: str)` before using a relevant vault-native skill from the injected catalog, and call `load_skill_resource(skill_name: str, path: str)` only for referenced resources you actually need.
 
 ### Session continuity
 

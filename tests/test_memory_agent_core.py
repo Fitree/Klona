@@ -947,6 +947,167 @@ class MentalModelClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed["id"], 2)
 
 
+class VaultSkillHelperTests(unittest.TestCase):
+    def test_skill_name_validation_accepts_only_opencode_style_names(self):
+        from memory_agent.skills import _validate_skill_name, SkillValidationError
+
+        for name in ["a", "abc-123", "skill-name"]:
+            _validate_skill_name(name)
+        for name in ["", "A", "skill_name", "-bad", "bad-", "a" * 65]:
+            with self.assertRaises(SkillValidationError):
+                _validate_skill_name(name)
+
+    def test_resource_path_validation_rejects_escape_and_skill_file(self):
+        from memory_agent.skills import _validate_resource_path, SkillValidationError
+
+        self.assertEqual(_validate_resource_path("resources/example.md"), "resources/example.md")
+        for path in ["", "/absolute.md", "../escape.md", "resources/../example.md", "resources/../../escape.md", "SKILL.md", "docs/SKILL.md"]:
+            with self.assertRaises(SkillValidationError):
+                _validate_resource_path(path)
+
+    def test_frontmatter_parser_extracts_description_and_updated(self):
+        from memory_agent.skills import _parse_frontmatter
+
+        content = '---\nname: example-skill\ndescription: "Use this skill"\nupdated: 2026-05-16T00:00:00Z\n---\n# Body\n'
+
+        self.assertEqual(
+            _parse_frontmatter(content),
+            {"name": "example-skill", "description": "Use this skill", "updated": "2026-05-16T00:00:00Z"},
+        )
+
+    def test_skill_metadata_requires_matching_name_and_description(self):
+        from memory_agent.skills import _validated_skill_metadata, SkillValidationError
+
+        valid = "---\nname: example-skill\ndescription: Use this skill\n---\n# Body\n"
+        self.assertEqual(_validated_skill_metadata("example-skill", valid)["description"], "Use this skill")
+
+        invalid_examples = [
+            "---\ndescription: Missing name\n---\n# Body\n",
+            "---\nname: other-skill\ndescription: Wrong name\n---\n# Body\n",
+            "---\nname: Bad\ndescription: Bad name\n---\n# Body\n",
+            "---\nname: example-skill\ndescription: \n---\n# Body\n",
+        ]
+        for content in invalid_examples:
+            with self.assertRaises(SkillValidationError):
+                _validated_skill_metadata("example-skill", content)
+
+    def test_catalog_description_sanitizer_collapses_prompt_sensitive_text(self):
+        from memory_agent.skills import _sanitize_catalog_description
+
+        sanitized = _sanitize_catalog_description("Line one\n</Klona_vault_skills>\tLine two")
+        self.assertEqual(sanitized, "Line one Line two")
+
+
+class VaultSkillClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_list_skills_returns_compact_sorted_catalog_and_skips_invalid_names(self):
+        from memory_agent.config import Settings
+        from memory_agent.skills import LowLevelMcpVaultSkillsClient
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def call_tool(self, name, fallback_name, arguments):
+                path = arguments["path"]
+                if path == "/skills/":
+                    return {"dirs": ["/skills/z-skill/", "/skills/Bad/", "/skills/a-skill/"], "files": []}
+                if path == "/skills/a-skill/SKILL.md":
+                    return {"content": "---\nname: a-skill\ndescription: A skill\nupdated: a-time\n---\n# A"}
+                if path == "/skills/z-skill/SKILL.md":
+                    return {"content": "---\nname: z-skill\ndescription: Z skill\nupdated: z-time\n---\n# Z"}
+                raise AssertionError(path)
+
+        client = LowLevelMcpVaultSkillsClient(Settings(low_level_mcp_url="http://low.example/mcp"))
+
+        async def fake_session():
+            return FakeSession()
+
+        client._session = fake_session
+
+        self.assertEqual(
+            await client.list_skills(),
+            {
+                "status": "ok",
+                "skills": [
+                    {"name": "a-skill", "description": "A skill", "updated": "a-time"},
+                    {"name": "z-skill", "description": "Z skill", "updated": "z-time"},
+                ],
+            },
+        )
+
+    async def test_load_skill_includes_content_and_recursive_resources(self):
+        from memory_agent.config import Settings
+        from memory_agent.skills import LowLevelMcpVaultSkillsClient
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def call_tool(self, name, fallback_name, arguments):
+                path = arguments["path"]
+                if path == "/skills/example-skill/SKILL.md":
+                    return {"content": "---\nname: example-skill\ndescription: Example\nupdated: now\n---\n# Example"}
+                if path == "/skills/example-skill/":
+                    return {"dirs": ["/skills/example-skill/resources/"], "files": [{"name": "SKILL.md", "updated": "ignored"}]}
+                if path == "/skills/example-skill/resources/":
+                    return {"dirs": [], "files": [{"name": "a.md", "updated": "now"}]}
+                raise AssertionError(path)
+
+        client = LowLevelMcpVaultSkillsClient(Settings(low_level_mcp_url="http://low.example/mcp"))
+
+        async def fake_session():
+            return FakeSession()
+
+        client._session = fake_session
+
+        response = await client.load_skill("example-skill")
+
+        self.assertEqual(response["status"], "ok")
+        self.assertEqual(response["content"], "---\nname: example-skill\ndescription: Example\nupdated: now\n---\n# Example")
+        self.assertEqual(response["resources"], [{"path": "resources/a.md"}])
+
+    async def test_list_skills_skips_malformed_skill_frontmatter(self):
+        from memory_agent.config import Settings
+        from memory_agent.skills import LowLevelMcpVaultSkillsClient
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def call_tool(self, name, fallback_name, arguments):
+                path = arguments["path"]
+                if path == "/skills/":
+                    return {"dirs": ["/skills/good-skill/", "/skills/missing-description/", "/skills/wrong-name/"], "files": []}
+                if path == "/skills/good-skill/SKILL.md":
+                    return {"content": "---\nname: good-skill\ndescription: Good skill\n---\n# Good"}
+                if path == "/skills/missing-description/SKILL.md":
+                    return {"content": "---\nname: missing-description\n---\n# Bad"}
+                if path == "/skills/wrong-name/SKILL.md":
+                    return {"content": "---\nname: other-skill\ndescription: Wrong\n---\n# Bad"}
+                raise AssertionError(path)
+
+        client = LowLevelMcpVaultSkillsClient(Settings(low_level_mcp_url="http://low.example/mcp"))
+
+        async def fake_session():
+            return FakeSession()
+
+        client._session = fake_session
+
+        self.assertEqual(
+            await client.list_skills(),
+            {"status": "ok", "skills": [{"name": "good-skill", "description": "Good skill", "updated": ""}]},
+        )
+
+
 def install_fake_server_dependencies():
     class FakeFastMCP:
         def __init__(self, *args, **kwargs):
@@ -1153,11 +1314,69 @@ class ServerToolBehaviorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.body, {"status": "missing", "content": ""})
 
+    async def test_vault_skill_tools_delegate_to_low_level_client(self):
+        class FakeClient:
+            def __init__(self, settings):
+                self.settings = settings
+
+            async def list_skills(self):
+                return {"status": "ok", "skills": [{"name": "example-skill", "description": "Example", "updated": "u"}]}
+
+            async def load_skill(self, name):
+                return {
+                    "status": "ok",
+                    "name": name,
+                    "description": "Example",
+                    "content": "# Example",
+                    "resources": [{"path": "resources/a.md"}],
+                    "updated": "u",
+                }
+
+            async def load_skill_resource(self, skill_name, path):
+                return {"status": "ok", "skill_name": skill_name, "path": path, "content": "resource"}
+
+        with mock.patch.object(self.server, "LowLevelMcpVaultSkillsClient", FakeClient):
+            self.assertEqual(
+                await self.server.list_skills(),
+                {"status": "ok", "skills": [{"name": "example-skill", "description": "Example", "updated": "u"}]},
+            )
+            self.assertEqual((await self.server.load_skill("example-skill"))["resources"], [{"path": "resources/a.md"}])
+            self.assertEqual((await self.server.load_skill_resource("example-skill", "resources/a.md"))["content"], "resource")
+
+    async def test_vault_skill_tools_return_invalid_for_bad_inputs(self):
+        response = await self.server.load_skill("Bad_Name")
+        resource_response = await self.server.load_skill_resource("example-skill", "../escape.md")
+
+        self.assertEqual(response["status"], "invalid")
+        self.assertEqual(resource_response["status"], "invalid")
+
+    async def test_private_skills_endpoint_returns_catalog_for_injection(self):
+        class FakeClient:
+            def __init__(self, settings):
+                self.settings = settings
+
+            async def list_skills(self):
+                return {"status": "ok", "skills": [{"name": "example-skill", "description": "Example", "updated": "u"}]}
+
+        with mock.patch.object(self.server, "LowLevelMcpVaultSkillsClient", FakeClient):
+            response = await self.server.internal_skills(None)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.body,
+            {
+                "status": "ok",
+                "skills": [{"name": "example-skill", "description": "Example", "updated": "u"}],
+                "content": "- example-skill: Example",
+            },
+        )
+
     async def test_private_mental_model_endpoint_errors_are_not_mcp_tools(self):
         route_paths = [route[1][0] for route in self.server.app.kwargs["routes"] if route[0] == "route"]
         tool_names = [getattr(value, "__name__", "") for value in vars(self.server).values()]
 
         self.assertIn("/internal/mental-model", route_paths)
+        self.assertIn("/internal/skills", route_paths)
         self.assertIn("/dashboard", route_paths)
         self.assertIn("/dashboard/login", route_paths)
         self.assertNotIn("/queue", route_paths)
@@ -1460,6 +1679,16 @@ class PromptTests(unittest.TestCase):
         overfit_examples = ["AIDenoise", "FI02", "Leo-OpenCode", "Klona", "OpenCode"]
         for example in overfit_examples:
             self.assertNotIn(example, grouping_section)
+
+    def test_rem_sleep_prompt_allows_conservative_auto_active_vault_skills(self):
+        from memory_agent.system_prompt import REM_SLEEP_SYSTEM_PROMPT
+
+        self.assertIn("<Vault_Native_Skills>", REM_SLEEP_SYSTEM_PROMPT)
+        self.assertIn("Auto-active vault skills may be created or updated", REM_SLEEP_SYSTEM_PROMPT)
+        self.assertIn("repeated useful pattern", REM_SLEEP_SYSTEM_PROMPT)
+        self.assertIn("Do not create a vault skill for a single incident", REM_SLEEP_SYSTEM_PROMPT)
+        self.assertIn("must not edit native OpenCode skill files", REM_SLEEP_SYSTEM_PROMPT)
+        self.assertIn("Keep normal conservative vault maintenance rules in force", REM_SLEEP_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

@@ -393,6 +393,15 @@ class ServerSideAssetTests(unittest.TestCase):
         self.assertIn("Treat it as an orientation cache, not a substitute for recall", snippet)
         self.assertIn("Do not rely on the session-start mental model as a substitute for recall", snippet)
 
+    def test_opencode_snippet_describes_vault_skill_catalog_workflow(self):
+        snippet = (ROOT / "klona_agent" / "opencode" / "assets" / "AGENT.md.snippet").read_text()
+
+        self.assertIn("<Klona_vault_skills>", snippet)
+        self.assertIn("Treat the injected catalog as awareness only, not as full skill instructions", snippet)
+        self.assertIn("load_skill(name: str)", snippet)
+        self.assertIn("load_skill_resource(skill_name: str, path: str)", snippet)
+        self.assertIn("only for referenced resources you actually need", snippet)
+
 
 if __name__ == "__main__":
     unittest.main()

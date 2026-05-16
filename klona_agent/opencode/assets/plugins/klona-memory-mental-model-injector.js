@@ -4,10 +4,13 @@ import path from "node:path"
 
 const INITIAL_CONTEXT_OPEN = "<Klona_memory_mental_model>\n"
 const INITIAL_CONTEXT_CLOSE = "\n</Klona_memory_mental_model>"
+const VAULT_SKILLS_OPEN = "<Klona_vault_skills>\n"
+const VAULT_SKILLS_CLOSE = "\n</Klona_vault_skills>"
 const DEFAULT_MCP_NAME = "klona_memory"
 const DEFAULT_MCP_TIMEOUT_MS = 600_000
 const KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH = "/KLONA_MEMORY_MENTAL_MODEL.md"
 const INTERNAL_MENTAL_MODEL_PATH = "/internal/mental-model"
+const INTERNAL_VAULT_SKILLS_PATH = "/internal/skills"
 const PLUGIN_STATE_DIR = path.join(
   os.homedir(),
   ".local",
@@ -78,17 +81,25 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
   }
 
   function mentalModelEndpointUrl(mcpUrl) {
+    return internalEndpointUrl(mcpUrl, INTERNAL_MENTAL_MODEL_PATH)
+  }
+
+  function vaultSkillsEndpointUrl(mcpUrl) {
+    return internalEndpointUrl(mcpUrl, INTERNAL_VAULT_SKILLS_PATH)
+  }
+
+  function internalEndpointUrl(mcpUrl, internalPath) {
     const url = new URL(mcpUrl)
     const pathname = url.pathname.replace(/\/+$/, "")
     url.pathname = pathname.endsWith("/mcp")
-      ? `${pathname.slice(0, -4)}${INTERNAL_MENTAL_MODEL_PATH}`
-      : INTERNAL_MENTAL_MODEL_PATH
+      ? `${pathname.slice(0, -4)}${internalPath}`
+      : internalPath
     url.search = ""
     url.hash = ""
     return url.toString()
   }
 
-  async function fetchPrivateMentalModelEndpoint({ url, headers, timeout }) {
+  async function fetchPrivateJsonEndpoint({ url, headers, timeout, label }) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
 
@@ -104,10 +115,17 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
 
       const raw = await response.text()
       let payload = null
-      if (raw.trim()) payload = JSON.parse(raw)
+      if (raw.trim()) {
+        try {
+          payload = JSON.parse(raw)
+        } catch (error) {
+          if (response.status === 404) return { status: "missing" }
+          throw error
+        }
+      }
 
-      if (response.status === 404 && payload?.status === "missing") return payload
-      if (!response.ok) throw new Error(`private mental-model endpoint failed (${response.status}): ${raw || response.statusText}`)
+      if (response.status === 404 && (payload?.status === "missing" || payload === null)) return { status: "missing" }
+      if (!response.ok) throw new Error(`private ${label} endpoint failed (${response.status}): ${raw || response.statusText}`)
       return payload
     } finally {
       clearTimeout(timer)
@@ -119,10 +137,11 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     if (!config) return { status: "missing", content: "" }
 
     const endpointUrl = mentalModelEndpointUrl(config.url)
-    const payload = await fetchPrivateMentalModelEndpoint({
+    const payload = await fetchPrivateJsonEndpoint({
       url: endpointUrl,
       headers: config.headers,
       timeout: config.timeout,
+      label: "mental-model",
     })
 
     if (payload?.status === "ok" && typeof payload.content === "string") {
@@ -132,6 +151,49 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
       return { status: "missing", content: "" }
     }
     throw new Error(payload?.error || "private mental-model endpoint returned an unexpected response")
+  }
+
+  async function readKlonaVaultSkillsCatalog() {
+    const config = getMemoryMcpConfig()
+    if (!config) return { status: "missing", content: "" }
+
+    const endpointUrl = vaultSkillsEndpointUrl(config.url)
+    const payload = await fetchPrivateJsonEndpoint({
+      url: endpointUrl,
+      headers: config.headers,
+      timeout: config.timeout,
+      label: "vault-skills",
+    })
+
+    if (payload?.status === "ok" && typeof payload.content === "string") {
+      return { status: "ok", content: payload.content }
+    }
+    if (payload?.status === "ok" && Array.isArray(payload.skills)) {
+      const content = formatVaultSkillsCatalog(payload.skills)
+      return { status: content ? "ok" : "missing", content }
+    }
+    if (payload?.status === "missing") {
+      return { status: "missing", content: "" }
+    }
+    throw new Error(payload?.error || "private vault-skills endpoint returned an unexpected response")
+  }
+
+  function sanitizeVaultSkillCatalogDescription(description) {
+    return String(description)
+      .replace(/[\s\x00-\x1f\x7f]+/g, " ")
+      .replaceAll("<Klona_vault_skills>", "")
+      .replaceAll("</Klona_vault_skills>", "")
+      .trim()
+      .slice(0, 300)
+  }
+
+  function formatVaultSkillsCatalog(skills) {
+    return skills
+      .filter((skill) => skill && typeof skill.name === "string" && typeof skill.description === "string")
+      .map((skill) => ({ name: skill.name, description: sanitizeVaultSkillCatalogDescription(skill.description) }))
+      .filter((skill) => skill.description)
+      .map((skill) => `- ${skill.name}: ${skill.description}`)
+      .join("\n")
   }
 
   function injectionStatusFilePath(sessionID) {
@@ -255,8 +317,18 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     return `${INITIAL_CONTEXT_OPEN}${memoryContent}${INITIAL_CONTEXT_CLOSE}`
   }
 
-  function prependKlonaMemoryMentalModelToFirstTextPart(output, memoryContent) {
-    const prefix = wrapKlonaMemoryMentalModelContent(memoryContent)
+  function wrapKlonaVaultSkillsCatalogContent(catalogContent) {
+    return `${VAULT_SKILLS_OPEN}Catalog only; not full skill instructions. Load full content before applying a relevant vault skill by using the high-level klona_memory MCP skill tools: call load_skill for the skill, and lazily call load_skill_resource with skill_name and path for referenced resources.\n\n${catalogContent}${VAULT_SKILLS_CLOSE}`
+  }
+
+  function buildKlonaInjectionPrefix(memoryContent, vaultSkillsContent) {
+    const blocks = []
+    if (memoryContent) blocks.push(wrapKlonaMemoryMentalModelContent(memoryContent))
+    if (vaultSkillsContent) blocks.push(wrapKlonaVaultSkillsCatalogContent(vaultSkillsContent))
+    return blocks.join("\n\n")
+  }
+
+  function prependKlonaContextToFirstTextPart(output, prefix) {
     const firstTextPart = output.parts.find(
       (part) => part?.type === "text" && typeof part.text === "string",
     )
@@ -305,31 +377,46 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
         await writeInjectionStatus(sessionID, { should_inject: false, reason: `${status.reason}-consumed` })
 
         const memoryResult = await readKlonaMemoryMentalModel()
+        let vaultSkillsResult = { status: "missing", content: "" }
+        try {
+          vaultSkillsResult = await readKlonaVaultSkillsCatalog()
+        } catch (error) {
+          await log("warn", "Skipping Klona vault skills catalog injection because the catalog endpoint is unavailable", {
+            sessionID,
+            agent,
+            path: INTERNAL_VAULT_SKILLS_PATH,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
         const memoryContent = memoryResult.content
+        const vaultSkillsContent = vaultSkillsResult.content
+        const injectionPrefix = buildKlonaInjectionPrefix(memoryContent, vaultSkillsContent)
 
-        if (!memoryContent) {
+        if (!injectionPrefix) {
           if (!loggedSessions.has(sessionID)) {
             loggedSessions.add(sessionID)
-            await log("debug", "Skipping KLONA_MEMORY_MENTAL_MODEL.md injection because the file is missing or empty", {
+            await log("debug", "Skipping KLONA context injection because KLONA_MEMORY_MENTAL_MODEL.md and vault skills catalog are missing or empty", {
               sessionID,
               agent,
               path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
               status: memoryResult.status,
+              vaultSkillsStatus: vaultSkillsResult.status,
             })
           }
           return
         }
 
-        injected = prependKlonaMemoryMentalModelToFirstTextPart(output, memoryContent)
+        injected = prependKlonaContextToFirstTextPart(output, injectionPrefix)
         if (!injected) return
 
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
-          await log("info", "Prepended KLONA_MEMORY_MENTAL_MODEL.md into the first user message", {
+          await log("info", "Prepended KLONA context into the first user message", {
             sessionID,
             agent,
             path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
             chars: memoryContent.length,
+            vaultSkillsChars: vaultSkillsContent.length,
             statusPath: injectionStatusFilePath(sessionID),
           })
         }

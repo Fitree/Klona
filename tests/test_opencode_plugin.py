@@ -39,16 +39,47 @@ class OpenCodePluginTests(unittest.TestCase):
         self.assertIn('timeout: typeof mcp.timeout === "number" ? mcp.timeout : DEFAULT_MCP_TIMEOUT_MS', plugin)
         self.assertIn('const INTERNAL_MENTAL_MODEL_PATH = "/internal/mental-model"', plugin)
         self.assertIn('function mentalModelEndpointUrl(mcpUrl)', plugin)
+        self.assertIn('function internalEndpointUrl(mcpUrl, internalPath)', plugin)
         self.assertIn('method: "GET"', plugin)
         self.assertIn('Accept: "application/json"', plugin)
         self.assertNotIn('name: "recall"', plugin)
         self.assertNotIn('tools/call', plugin)
         self.assertNotIn('name: "vault_read"', plugin)
 
+    def test_plugin_fetches_optional_vault_skills_catalog_from_internal_endpoint(self):
+        plugin = installer.PLUGIN_SOURCE.read_text()
+
+        self.assertIn('const INTERNAL_VAULT_SKILLS_PATH = "/internal/skills"', plugin)
+        self.assertIn('function vaultSkillsEndpointUrl(mcpUrl)', plugin)
+        self.assertIn('async function readKlonaVaultSkillsCatalog()', plugin)
+        self.assertIn('label: "vault-skills"', plugin)
+        self.assertIn('Array.isArray(payload.skills)', plugin)
+        self.assertIn('function sanitizeVaultSkillCatalogDescription(description)', plugin)
+        self.assertIn('function formatVaultSkillsCatalog(skills)', plugin)
+        self.assertIn('replaceAll("</Klona_vault_skills>", "")', plugin)
+        self.assertIn('const content = formatVaultSkillsCatalog(payload.skills)', plugin)
+        self.assertIn('`- ${skill.name}: ${skill.description}`', plugin)
+        self.assertIn('let vaultSkillsResult = { status: "missing", content: "" }', plugin)
+        self.assertIn('Skipping Klona vault skills catalog injection because the catalog endpoint is unavailable', plugin)
+        self.assertIn('response.status === 404', plugin)
+        self.assertIn('return { status: "missing" }', plugin)
+
+    def test_plugin_injects_vault_skills_catalog_as_awareness_not_instructions(self):
+        plugin = installer.PLUGIN_SOURCE.read_text()
+
+        self.assertIn('const VAULT_SKILLS_OPEN = "<Klona_vault_skills>\\n"', plugin)
+        self.assertIn('const VAULT_SKILLS_CLOSE = "\\n</Klona_vault_skills>"', plugin)
+        self.assertIn('Catalog only; not full skill instructions.', plugin)
+        self.assertIn('call load_skill for the skill', plugin)
+        self.assertIn('lazily call load_skill_resource with skill_name and path for referenced resources', plugin)
+        self.assertIn('function buildKlonaInjectionPrefix(memoryContent, vaultSkillsContent)', plugin)
+        self.assertIn('if (memoryContent) blocks.push(wrapKlonaMemoryMentalModelContent(memoryContent))', plugin)
+        self.assertIn('if (vaultSkillsContent) blocks.push(wrapKlonaVaultSkillsCatalogContent(vaultSkillsContent))', plugin)
+
     def test_plugin_marks_missing_or_empty_mental_model_as_checked(self):
         plugin = installer.PLUGIN_SOURCE.read_text()
 
-        self.assertIn('if (response.status === 404 && payload?.status === "missing") return payload', plugin)
+        self.assertIn('if (response.status === 404 && (payload?.status === "missing" || payload === null)) return { status: "missing" }', plugin)
         self.assertIn('const memoryResult = await readKlonaMemoryMentalModel()', plugin)
         self.assertIn('await writeInjectionStatus(sessionID, { should_inject: false, reason: `${status.reason}-consumed` })', plugin)
         self.assertIn('status: memoryResult.status', plugin)
