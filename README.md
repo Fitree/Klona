@@ -13,6 +13,7 @@ The new direction is server-side: Klona should become **your working memory for 
 - **Wiki-style knowledge base**: Memory lives in an inspectable markdown vault with ordinary files, directories, and `[[wikilinks]]`.
 - **Server-side memory agent**: Local/user-side agents call your Klona MCP server, while the server-side agent owns working context, recall, remember queues, duplicate checks, and memory refinement.
 - **REM sleep maintenance**: Automatic or manual REM sleep jobs give the vault a deeper maintenance pass, keeping recently captured memories organized and useful.
+- **Vault-native skills**: Reusable agent workflows can live in the vault under `/skills/`, be discovered through Klona MCP, and be loaded by user-side agents on demand.
 - **Dashboard**: `/dashboard` lets you inspect recall, remember, and REM sleep queues, trigger manual REM sleep jobs, and remove pending REM sleep jobs.
 - **Unified cross-platform experience**: The same memory agent is designed to serve multiple agent platforms, so changing clients does not mean changing what your assistant remembers.
 - **User-owned memory server**: Memory is your asset, your leverage, and your control plane. The server, vault, tokens, and access boundaries are under your control rather than locked inside one assistant product.
@@ -24,9 +25,47 @@ Klona has four user-facing pieces working together:
 1. **User-side/local agents** connect to your user-owned Klona MCP server through the `klona_memory` tools:
    - `recall(input: str)` retrieves relevant context synchronously when an agent needs memory.
    - `remember(input: str)` queues candidate memories asynchronously so the current conversation can continue.
+   - `list_skills()`, `load_skill(name: str)`, and `load_skill_resource(skill_name: str, path: str)` let agents discover and load reusable vault-native skills.
 2. **The Klona MCP server runs the server-side memory agent**. The server-side agent keeps shared working memory across calls, handles recall immediately, processes remember requests in the background, and refines memories before they are written.
-3. **Mental-model injection** uses `KLONA_MEMORY_MENTAL_MODEL.md` as a fast session-start summary. Where supported, Klona injects that summary into the first message/new session behavior so agents start with a useful model before making explicit recall calls.
+3. **Session-start injection** uses `KLONA_MEMORY_MENTAL_MODEL.md` as a fast session-start summary and, where supported, injects a compact vault skill catalog so agents know which skills can be loaded. The catalog is awareness only; agents still load full skill content through MCP before applying it.
 4. **Inspectable markdown persistence** keeps durable memory in a vault you own, with ordinary files, directories, and `[[wikilinks]]`.
+
+## Vault-native skills
+
+Vault-native skills are reusable, action-oriented instruction bundles stored directly in the markdown vault. They follow the same mental model as normal agent skills, but the vault remains the source of truth instead of a platform-specific skills directory.
+
+Store each skill at:
+
+```text
+/skills/<skill-name>/SKILL.md
+```
+
+Optional resources live inside the same skill directory and are referenced by paths relative to that directory:
+
+```text
+/skills/repository-progress-memory/SKILL.md
+/skills/repository-progress-memory/examples/good-memory.md
+/skills/repository-progress-memory/reference/rules.md
+```
+
+`SKILL.md` must include frontmatter with a matching skill name and a description:
+
+```md
+---
+name: repository-progress-memory
+description: Use when repository work reaches a durable milestone that should be remembered.
+---
+
+# Repository Progress Memory
+
+...
+```
+
+Skill names must match `^[a-z0-9]+(-[a-z0-9]+)*$` and be 1-64 characters. `load_skill_resource` accepts only relative paths inside the skill directory; `SKILL.md` itself is loaded with `load_skill`.
+
+When the full OpenCode integration is installed, the plugin injects a compact `<Klona_vault_skills>` catalog into the first root-session user message alongside the mental model. Agents should treat that catalog as awareness only, then call `load_skill(name)` before following a skill and `load_skill_resource(skill_name, path)` only for referenced resources they actually need.
+
+REM sleep may conservatively create or update auto-active vault skills when repeated useful patterns are clearly evidenced by existing vault content. It must not edit native OpenCode skill files or write outside the vault.
 
 The important boundary: normal agents connect to your Klona MCP server. The detailed vault service behind it is implementation/admin infrastructure, not the user-facing architecture.
 
@@ -97,14 +136,17 @@ The MCP tools are:
 
 - `recall(input: str)`
 - `remember(input: str)`
+- `list_skills()`
+- `load_skill(name: str)`
+- `load_skill_resource(skill_name: str, path: str)`
 
 If you configured a bearer token during stack setup, set the same token in your MCP client. If the Klona MCP server has no token configured, the MCP client sends no bearer token.
 
-This exposes only the `recall` and `remember` MCP tools to the agent. It does not install any platform-specific Klona instructions, system prompt updates, or plugins.
+This exposes the raw MCP tools to the agent. It does not install any platform-specific Klona instructions, system prompt updates, or plugins, so MCP-only clients do not receive automatic mental-model or vault-skill catalog injection unless they implement that themselves.
 
 #### Full Klona integration
 
-Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and the mental-model plugin. OpenCode is currently the only supported full integration.
+Use this path to install the complete local-agent integration: MCP config plus Klona-managed instructions/system prompt and the OpenCode plugin that injects the mental model and vault-skill catalog. OpenCode is currently the only supported full integration.
 
 Install or refresh the OpenCode integration:
 
@@ -140,7 +182,7 @@ Planned future integrations include Claude Code, Codex, Pi, and other agent plat
 
 In the supported Compose stack, an internal vault service is reachable only inside the Docker network for server-side memory-agent use. It is the only service that mounts the markdown vault.
 
-Do not point normal user-side agents at internal/admin services. Use your Klona MCP server (`http://localhost:32310/mcp` by default) so agents interact through `recall(input: str)` and `remember(input: str)`.
+Do not point normal user-side agents at internal/admin services. Use your Klona MCP server (`http://localhost:32310/mcp` by default) so agents interact through the high-level memory and vault-skill MCP tools.
 
 See [`memory_server/README.md`](memory_server/README.md) for direct/admin implementation details and safety notes.
 
