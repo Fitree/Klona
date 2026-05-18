@@ -258,11 +258,11 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertIn("AGENTS.md", content)
         self.assertIn("opencode.json", content)
         self.assertIn("normal install should not install local klona-memory subagent", content)
-        self.assertIn("plugins/klona-memory-mental-model-injector.js", content)
+        self.assertIn("plugins/klona-session-context-injector.js", content)
         self.assertNotIn("klona-memory-session.js", content)
         self.assertNotIn("XDG_DATA_HOME", content)
         self.assertIn('HOME / ".local" / "share" / "opencode"', content)
-        self.assertIn('plugin-state" / "klona-memory-mental-model-injector"', content)
+        self.assertIn('plugin-state" / "klona-session-context-injector"', content)
         self.assertIn("unified_diff", content)
         self.assertIn("ThreadingHTTPServer", content)
         self.assertIn("BaseHTTPRequestHandler", content)
@@ -341,7 +341,7 @@ class SandboxE2EScriptTests(unittest.TestCase):
         self.assertNotIn("clean_scenario_state", content)
         self.assertNotIn("unlink(missing_ok=True)", content)
         self.assertNotIn(
-            'shutil.rmtree(OPENCODE_DATA_DIR / "plugin-state" / "klona-memory-mental-model-injector"',
+            'shutil.rmtree(OPENCODE_DATA_DIR / "plugin-state" / "klona-session-context-injector"',
             content,
         )
         self.assertIn("shutil.rmtree(TMP_DIR, ignore_errors=True)", content)

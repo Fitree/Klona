@@ -22,8 +22,9 @@ KLONA_MEMORY_MCP_TIMEOUT_MS = 1_000_000
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "assets"
 SNIPPET_FILE = ASSETS_DIR / "AGENT.md.snippet"
-PLUGIN_SOURCE = ASSETS_DIR / "plugins" / "klona-memory-mental-model-injector.js"
-PLUGIN_FILENAME = "klona-memory-mental-model-injector.js"
+PLUGIN_SOURCE = ASSETS_DIR / "plugins" / "klona-session-context-injector.js"
+PLUGIN_FILENAME = "klona-session-context-injector.js"
+PREVIOUS_PLUGIN_FILENAMES = ("klona-memory-mental-model-injector.js",)
 LEGACY_AGENT_FILENAME = "klona-memory.md"
 
 
@@ -240,6 +241,7 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
     agent_md = target / "AGENTS.md"
     legacy_agent_copy = target / "agents" / LEGACY_AGENT_FILENAME
     plugin_copy = target / "plugins" / PLUGIN_FILENAME
+    previous_plugin_copies = [target / "plugins" / filename for filename in PREVIOUS_PLUGIN_FILENAMES]
     _check_required_assets()
     config = _read_json_object(config_path)
     url = (
@@ -259,12 +261,15 @@ def install(mcp_url: str | None = None, mcp_token: str | None = None) -> None:
         plugin_copy: _snapshot_file(plugin_copy),
         config_path: _snapshot_file(config_path),
     }
+    snapshots.update({path: _snapshot_file(path) for path in previous_plugin_copies})
     mutation_started = False
     try:
         target.mkdir(parents=True, exist_ok=True)
         mutation_started = True
         _install_marker_block(agent_md)
         legacy_agent_copy.unlink(missing_ok=True)
+        for previous_plugin_copy in previous_plugin_copies:
+            previous_plugin_copy.unlink(missing_ok=True)
         _copy_required_asset(PLUGIN_SOURCE, plugin_copy)
         _install_mcp_config(config_path, url, token, config)
     except BaseException:
@@ -282,6 +287,7 @@ def uninstall() -> None:
     for path in [
         target / "agents" / LEGACY_AGENT_FILENAME,
         target / "plugins" / PLUGIN_FILENAME,
+        *(target / "plugins" / filename for filename in PREVIOUS_PLUGIN_FILENAMES),
     ]:
         if path.exists():
             path.unlink()

@@ -160,9 +160,19 @@ class OpenCodeInstallerTests(unittest.TestCase):
     def test_install_copies_plugin_but_not_local_memory_subagent(self):
         self.install_with_prompts()
 
-        plugin_copy = self.opencode / "plugins" / "klona-memory-mental-model-injector.js"
+        plugin_copy = self.opencode / "plugins" / "klona-session-context-injector.js"
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
         self.assertEqual(plugin_copy.read_text(), installer.PLUGIN_SOURCE.read_text())
+
+    def test_install_removes_previous_owned_plugin_name(self):
+        previous_plugin = self.opencode / "plugins" / "klona-memory-mental-model-injector.js"
+        previous_plugin.parent.mkdir(parents=True, exist_ok=True)
+        previous_plugin.write_text("previous owned plugin")
+
+        self.install_with_prompts()
+
+        self.assertFalse(previous_plugin.exists())
+        self.assertTrue((self.opencode / "plugins" / "klona-session-context-injector.js").exists())
 
     def test_install_removes_legacy_local_memory_subagent(self):
         legacy_agent = self.opencode / "agents" / "klona-memory.md"
@@ -200,6 +210,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertIn("outro", agent_content)
         self.assertNotIn(NEW_BEGIN_MARKER, agent_content)
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
+        self.assertFalse((self.opencode / "plugins" / "klona-session-context-injector.js").exists())
         self.assertFalse((self.opencode / "plugins" / "klona-memory-mental-model-injector.js").exists())
         self.assertEqual(extra_agent.read_text(), "custom agent")
         self.assertEqual(extra_plugin.read_text(), "custom plugin")
@@ -313,7 +324,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
         self.assertEqual(agent.read_text(), "existing instructions\n")
         self.assertNotIn(NEW_BEGIN_MARKER, agent.read_text())
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
-        self.assertFalse((self.opencode / "plugins" / "klona-memory-mental-model-injector.js").exists())
+        self.assertFalse((self.opencode / "plugins" / "klona-session-context-injector.js").exists())
 
     def test_install_rolls_back_marker_and_assets_when_late_config_write_fails(self):
         config = self.opencode / "opencode.json"
@@ -330,7 +341,7 @@ class OpenCodeInstallerTests(unittest.TestCase):
 
         self.assertFalse((self.opencode / "AGENTS.md").exists())
         self.assertFalse((self.opencode / "agents" / "klona-memory.md").exists())
-        self.assertFalse((self.opencode / "plugins" / "klona-memory-mental-model-injector.js").exists())
+        self.assertFalse((self.opencode / "plugins" / "klona-session-context-injector.js").exists())
         self.assertEqual(json.loads(config.read_text()), {"theme": "dark"})
 
 

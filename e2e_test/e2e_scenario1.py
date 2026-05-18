@@ -355,10 +355,10 @@ def summarize_opencode_session(session_id: str):
             raise SystemExit(f"opencode summarize failed with HTTP {response.status}")
 
 
-def check_klona_memory_mental_model_injector_state_dir():
-    state_dir = OPENCODE_DATA_DIR / "plugin-state" / "klona-memory-mental-model-injector"
+def check_klona_session_context_injector_state_dir():
+    state_dir = OPENCODE_DATA_DIR / "plugin-state" / "klona-session-context-injector"
     if not state_dir.is_dir():
-        raise SystemExit(f"Klona memory mental model injector state dir is missing: {state_dir}")
+        raise SystemExit(f"Klona session context injector state dir is missing: {state_dir}")
 
 
 def verify_uninstall():
@@ -371,7 +371,7 @@ def verify_uninstall():
 
     for path in [
         OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md",
-        OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js",
+        OPENCODE_CONFIG_DIR / "plugins" / "klona-session-context-injector.js",
     ]:
         if path.exists():
             raise SystemExit(f"KLONA artifact remains after uninstall: {path}")
@@ -405,12 +405,12 @@ def main():
         phase("Verify installed files")
         require_file(OPENCODE_CONFIG_DIR / "AGENTS.md")
         require_file(OPENCODE_CONFIG)
-        require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js")
+        require_file(OPENCODE_CONFIG_DIR / "plugins" / "klona-session-context-injector.js")
         if (OPENCODE_CONFIG_DIR / "agents" / "klona-memory.md").exists():
             raise SystemExit("normal install should not install local klona-memory subagent")
         assert_file_matches(
-            "klona_agent/opencode/assets/plugins/klona-memory-mental-model-injector.js",
-            OPENCODE_CONFIG_DIR / "plugins" / "klona-memory-mental-model-injector.js",
+            "klona_agent/opencode/assets/plugins/klona-session-context-injector.js",
+            OPENCODE_CONFIG_DIR / "plugins" / "klona-session-context-injector.js",
         )
 
         phase("Configure fake OpenAI-compatible provider")
@@ -443,7 +443,7 @@ def main():
 
         phase("Verify fake provider captured injected Klona memory mental model")
         check_klona_memory_mental_model_injection_at_user_message("Verify initial Klona memory mental model injection")
-        check_klona_memory_mental_model_injector_state_dir()
+        check_klona_session_context_injector_state_dir()
 
         phase("Find OpenCode session created by first message")
         session_id = opencode_session_id_for_title(session_title)

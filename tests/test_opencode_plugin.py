@@ -4,14 +4,16 @@ from klona_agent.opencode import install as installer
 
 
 class OpenCodePluginTests(unittest.TestCase):
-    def test_plugin_is_named_klona_memory_mental_model_injector(self):
-        self.assertEqual(installer.PLUGIN_SOURCE.name, "klona-memory-mental-model-injector.js")
+    def test_plugin_is_named_klona_session_context_injector(self):
+        self.assertEqual(installer.PLUGIN_SOURCE.name, "klona-session-context-injector.js")
 
         plugin = installer.PLUGIN_SOURCE.read_text()
 
-        self.assertIn("export const KlonaMemoryMentalModelInjectorPlugin", plugin)
-        self.assertIn('"klona-memory-mental-model-injector"', plugin)
-        self.assertIn('plugin: "klona-memory-mental-model-injector"', plugin)
+        self.assertIn("export const KlonaSessionContextInjectorPlugin", plugin)
+        self.assertIn('"klona-session-context-injector"', plugin)
+        self.assertIn('plugin: "klona-session-context-injector"', plugin)
+        self.assertNotIn("KlonaMemoryMentalModelInjectorPlugin", plugin)
+        self.assertNotIn('"klona-memory-mental-model-injector"', plugin)
         self.assertNotIn("KlonaMemorySessionPlugin", plugin)
         self.assertNotIn('service: "klona-memory-session"', plugin)
 

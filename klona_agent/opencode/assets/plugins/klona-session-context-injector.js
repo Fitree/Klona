@@ -17,9 +17,9 @@ const PLUGIN_STATE_DIR = path.join(
   "share",
   "opencode",
   "plugin-state",
-  "klona-memory-mental-model-injector",
+  "klona-session-context-injector",
 )
-export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
+export const KlonaSessionContextInjectorPlugin = async ({ client }) => {
   let resolvedConfig
   const loggedSessions = new Set()
 
@@ -27,7 +27,7 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
     try {
       await client.app.log({
         body: {
-          service: "klona-memory-mental-model-injector",
+          service: "klona-session-context-injector",
           level,
           message,
           extra,
@@ -340,7 +340,7 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
       firstTextPart.synthetic = false
       firstTextPart.metadata = {
         ...(firstTextPart.metadata ?? {}),
-        plugin: "klona-memory-mental-model-injector",
+        plugin: "klona-session-context-injector",
         prepended: true,
       }
       return true
@@ -423,7 +423,7 @@ export const KlonaMemoryMentalModelInjectorPlugin = async ({ client }) => {
       } catch (error) {
         if (!loggedSessions.has(sessionID)) {
           loggedSessions.add(sessionID)
-          await log("warn", "Failed to inject KLONA_MEMORY_MENTAL_MODEL.md into session user context", {
+          await log("warn", "Failed to inject KLONA session context into session user context", {
             sessionID,
             agent,
             path: KLONA_MEMORY_MENTAL_MODEL_VAULT_PATH,
